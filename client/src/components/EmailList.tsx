@@ -1,8 +1,9 @@
-import { Table, Tag, Input, Select, Space, Badge } from 'antd';
+import { Table, Tag, Input, Select, Space, Badge, Button, Popconfirm } from 'antd';
 import {
   SearchOutlined,
   WindowsOutlined,
   GoogleOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { EmailCategory } from '../types';
@@ -25,6 +26,7 @@ interface EmailListProps {
   onSelectionChange: (ids: string[]) => void;
   onFilterChange: (filters: Partial<EmailFilters>) => void;
   onPageChange: (page: number, limit: number) => void;
+  onDelete?: (id: string) => void;
 }
 
 const categoryLabels: Record<EmailCategory, string> = {
@@ -70,6 +72,7 @@ function EmailList({
   onSelectionChange,
   onFilterChange,
   onPageChange,
+  onDelete,
 }: EmailListProps) {
   const suggestionMap = new Map(
     suggestions.map((s) => [s.emailId, s]),
@@ -237,6 +240,28 @@ function EmailList({
           />
         );
       },
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 48,
+      render: (_: unknown, record: Email) => (
+        <Popconfirm
+          title="Apagar este email?"
+          description="O email será movido para o lixo no servidor."
+          onConfirm={() => onDelete?.(record.id)}
+          okText="Apagar"
+          cancelText="Cancelar"
+          okButtonProps={{ danger: true }}
+        >
+          <Button
+            type="text"
+            size="small"
+            icon={<DeleteOutlined />}
+            danger
+          />
+        </Popconfirm>
+      ),
     },
   ];
 

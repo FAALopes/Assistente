@@ -11,7 +11,7 @@ import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
 import TriagePanel from './components/TriagePanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail } from './api';
 import type {
   EmailAccount,
   Email,
@@ -121,6 +121,17 @@ function App() {
     setSelectedIds([]);
     fetchEmails();
     fetchSuggestions();
+  };
+
+  const handleDeleteEmail = async (id: string) => {
+    try {
+      await deleteEmail(id);
+      message.success('Email apagado');
+      fetchEmails();
+      fetchFolders();
+    } catch {
+      message.error('Erro ao apagar email');
+    }
   };
 
   const handleApplySuggestions = (
@@ -249,6 +260,7 @@ function App() {
               onPageChange={(page, limit) =>
                 setFilters((prev) => ({ ...prev, page, limit }))
               }
+              onDelete={handleDeleteEmail}
             />
           </Spin>
         </Content>
