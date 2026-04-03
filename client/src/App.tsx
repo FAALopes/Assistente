@@ -3,12 +3,14 @@ import { Layout, Button, Typography, Space, message, Spin } from 'antd';
 import {
   SyncOutlined,
   SettingOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
 import EmailList from './components/EmailList';
 import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
+import TriagePanel from './components/TriagePanel';
 import { getAccounts, getEmails, getFolders, syncEmails, getSuggestions } from './api';
 import type {
   EmailAccount,
@@ -32,6 +34,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [triageOpen, setTriageOpen] = useState(false);
+  const isJunkFolder = filters.folder === 'junkemail';
   const [filters, setFilters] = useState<EmailFilters>({
     page: 1,
     limit: 50,
@@ -186,6 +190,16 @@ function App() {
             Painel de Email
           </Title>
           <Space>
+            {isJunkFolder && (
+              <Button
+                type="primary"
+                danger
+                icon={<ThunderboltOutlined />}
+                onClick={() => setTriageOpen(true)}
+              >
+                Triar Lixo
+              </Button>
+            )}
             <Button
               icon={<SettingOutlined />}
               onClick={() => setRulesOpen(true)}
@@ -237,6 +251,15 @@ function App() {
       </Layout>
 
       <RulesPanel open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <TriagePanel
+        open={triageOpen}
+        onClose={() => setTriageOpen(false)}
+        emails={emails}
+        onComplete={() => {
+          handleActionComplete();
+          fetchFolders();
+        }}
+      />
     </Layout>
   );
 }

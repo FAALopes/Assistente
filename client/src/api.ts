@@ -8,6 +8,9 @@ import type {
   EmailCategory,
   EmailFilters,
   PaginatedResponse,
+  TriageAction,
+  TriageResult,
+  TriageExecuteResult,
 } from './types';
 
 const api = axios.create({
@@ -103,4 +106,25 @@ export async function getSuggestions(
     emailIds,
   });
   return data.suggestions || [];
+}
+
+// Triage
+export async function triageJunkEmails(accountId?: string): Promise<TriageResult> {
+  const { data } = await api.post<TriageResult>('/api/emails/triage', { accountId });
+  return data;
+}
+
+export async function executeTriageActions(
+  actions: Array<{ emailId: string; action: TriageAction }>,
+): Promise<TriageExecuteResult> {
+  const { data } = await api.post<TriageExecuteResult>('/api/emails/triage/execute', { actions });
+  return data;
+}
+
+export async function recordTriageOverride(
+  emailId: string,
+  aiDecision: TriageAction,
+  userDecision: TriageAction,
+): Promise<void> {
+  await api.post('/api/emails/triage/override', { emailId, aiDecision, userDecision });
 }

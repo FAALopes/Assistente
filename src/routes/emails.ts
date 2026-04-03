@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { EmailCategory, RuleAction } from '@prisma/client';
 import { prisma } from '../index';
-import { fetchEmails, deleteEmail as graphDeleteEmail, getValidToken } from '../services/graphService';
+import { fetchEmails, deleteEmail as graphDeleteEmail, moveEmailToInbox, getValidToken } from '../services/graphService';
 import { learnFromAction } from '../services/ruleEngine';
+import { classifyJunkEmails, recordOverride, TriageActionType } from '../services/triageService';
 
 const router = Router();
 
@@ -332,6 +333,148 @@ router.delete('/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting email:', error);
     res.status(500).json({ error: 'Failed to delete email' });
+  }
+});
+
+// POST /api/emails/triage - Classify junk emails with AI
+router.post('/triage', async (req: Request, res: Response) => {
+  try {
+    const { accountId } = req.body;
+
+    const where: any = { folder: 'junkemail' };
+    if (accountId) where.accountId = accountId;
+
+    const junkEmails = await prisma.email.findMany({
+      where,
+      orderBy: { receivedAt: 'desc' },
+      take: 200,
+      select: {
+        id: true,
+        from: true,
+        subject: true,
+        bodyPreview: true,
+        receivedAt: true,
+      },
+    });
+
+    if (junkEmails.length === 0) {
+      res.json({ classifications: [], total: 0 });
+      return;
+    }
+
+    const classifications = await classifyJunkEmails(junkEmails);
+
+    res.json({
+      classifications,
+      total: junkEmails.length,
+    });
+  } catch (error) {
+    console.error('Error triaging emails:', error);
+    res.status(500).json({ error: 'Failed to triage emails' });
+  }
+});
+
+// POST /api/emails/triage/execute - Execute triage decisions
+router.post('/triage/execute', async (req: Request, res: Response) => {
+  try {
+    const { actions } = req.body as {
+      actions: Array<{ emailId: string; action: string }>;
+    };
+
+    if (!actions || !Array.isArray(actions)) {
+      res.status(400).json({ error: 'actions array is required' });
+      return;
+    }
+
+    const deleteIds: string[] = [];
+    const moveIds: string[] = [];
+    let reviewed = 0;
+    const errors: string[] = [];
+
+    for (const item of actions) {
+      if (item.action === 'DELETE') deleteIds.push(item.emailId);
+      else if (item.action === 'MOVE_TO_INBOX') moveIds.push(item.emailId);
+      else reviewed++;
+    }
+
+    // DELETE: move to trash in Graph + remove from DB
+    if (deleteIds.length > 0) {
+      const emails = await prisma.email.findMany({
+        where: { id: { in: deleteIds } },
+        include: { account: true },
+      });
+
+      for (const email of emails) {
+        try {
+          const accessToken = await getValidToken(email.accountId);
+          await graphDeleteEmail(accessToken, email.externalId);
+        } catch (err: any) {
+          errors.push(`Delete failed for ${email.from}: ${err.message}`);
+        }
+      }
+
+      await prisma.email.deleteMany({ where: { id: { in: deleteIds } } });
+    }
+
+    // MOVE_TO_INBOX: move in Graph + update folder in DB
+    if (moveIds.length > 0) {
+      const emails = await prisma.email.findMany({
+        where: { id: { in: moveIds } },
+        include: { account: true },
+      });
+
+      for (const email of emails) {
+        try {
+          const accessToken = await getValidToken(email.accountId);
+          await moveEmailToInbox(accessToken, email.externalId);
+          await prisma.email.update({
+            where: { id: email.id },
+            data: { folder: 'inbox' },
+          });
+        } catch (err: any) {
+          errors.push(`Move failed for ${email.from}: ${err.message}`);
+        }
+      }
+    }
+
+    res.json({
+      deleted: deleteIds.length,
+      moved: moveIds.length,
+      reviewed,
+      errors,
+    });
+  } catch (error) {
+    console.error('Error executing triage:', error);
+    res.status(500).json({ error: 'Failed to execute triage actions' });
+  }
+});
+
+// POST /api/emails/triage/override - Record learning override
+router.post('/triage/override', async (req: Request, res: Response) => {
+  try {
+    const { emailId, aiDecision, userDecision } = req.body;
+
+    if (!emailId || !aiDecision || !userDecision) {
+      res.status(400).json({ error: 'emailId, aiDecision, and userDecision are required' });
+      return;
+    }
+
+    const email = await prisma.email.findUnique({ where: { id: emailId } });
+    if (!email) {
+      res.status(404).json({ error: 'Email not found' });
+      return;
+    }
+
+    await recordOverride(
+      email.from,
+      aiDecision as TriageActionType,
+      userDecision as TriageActionType,
+    );
+
+    res.json({ message: 'Override recorded', sender: email.from });
+  } catch (error) {
+    console.error('Error recording triage override:', error);
+    res.status(500).json({ error: 'Failed to record override' });
   }
 });
 

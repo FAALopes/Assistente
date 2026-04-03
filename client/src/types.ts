@@ -72,6 +72,27 @@ export interface EmailFilters {
   limit?: number;
 }
 
+export type TriageAction = 'DELETE' | 'MOVE_TO_INBOX' | 'REVIEW';
+
+export interface TriageClassification {
+  emailId: string;
+  action: TriageAction;
+  reason: string;
+  confidence: number;
+}
+
+export interface TriageResult {
+  classifications: TriageClassification[];
+  total: number;
+}
+
+export interface TriageExecuteResult {
+  deleted: number;
+  moved: number;
+  reviewed: number;
+  errors: string[];
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;

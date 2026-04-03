@@ -141,6 +141,22 @@ export async function deleteEmail(accessToken: string, emailId: string): Promise
 }
 
 /**
+ * Move an email to the Inbox folder.
+ */
+export async function moveEmailToInbox(accessToken: string, emailId: string): Promise<void> {
+  try {
+    const client = createGraphClient(accessToken);
+
+    await client
+      .api(`/me/messages/${emailId}/move`)
+      .post({ destinationId: 'inbox' });
+  } catch (error: any) {
+    console.error('Error moving email to inbox via Graph:', error?.message || error);
+    throw new Error('Failed to move email to inbox via Microsoft Graph');
+  }
+}
+
+/**
  * List mail folders for the account.
  */
 export async function getMailFolders(accessToken: string): Promise<MailFolder[]> {

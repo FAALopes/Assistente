@@ -41,6 +41,12 @@ enum RuleAction {
   SAVE_ONEDRIVE
 }
 
+enum TriageAction {
+  DELETE
+  MOVE_TO_INBOX
+  REVIEW
+}
+
 model EmailAccount {
   id           String    @id @default(uuid())
   email        String
@@ -80,6 +86,22 @@ model Email {
   @@index([receivedAt])
   @@index([folder])
   @@map("emails")
+}
+
+model TriageOverride {
+  id            String       @id @default(uuid())
+  senderAddress String
+  senderDomain  String
+  subjectPattern String?
+  aiDecision    TriageAction
+  userDecision  TriageAction
+  occurrences   Int          @default(1)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([senderAddress, userDecision])
+  @@index([senderDomain])
+  @@map("triage_overrides")
 }
 
 model Rule {
