@@ -175,39 +175,40 @@ router.get('/folders', async (req: Request, res: Response) => {
       archive: 'Arquivo',
     };
 
-    if (account && typeof account === 'string') {
-      // Return folders for a specific account
-      const folders = await prisma.email.groupBy({
-        by: ['folder'],
-        where: { accountId: account },
-        _count: { id: true },
-      });
+    // All accounts
+    const accounts = await prisma.emailAccount.findMany({ select: { id: true } });
 
-      const result = folders.map((f) => ({
-        id: f.folder,
-        label: folderLabels[f.folder] || f.folder,
-        count: f._count.id,
+    // Get counts grouped by account + folder
+    const folders = await prisma.email.groupBy({
+      by: ['accountId', 'folder'],
+      _count: { id: true },
+    });
+
+    // Build a lookup: "accountId:folder" -> count
+    const countMap: Record<string, number> = {};
+    for (const f of folders) {
+      countMap[`${f.accountId}:${f.folder}`] = f._count.id;
+    }
+
+    if (account && typeof account === 'string') {
+      // Return folders for a specific account, always showing all SYNC_FOLDERS
+      const result = SYNC_FOLDERS.map((sf) => ({
+        id: sf.graphName,
+        label: folderLabels[sf.graphName] || sf.label,
+        count: countMap[`${account}:${sf.graphName}`] || 0,
       }));
 
       res.json(result);
     } else {
-      // Return folders grouped by account
-      const folders = await prisma.email.groupBy({
-        by: ['accountId', 'folder'],
-        _count: { id: true },
-      });
-
-      // Build a map: accountId -> folders[]
+      // Return folders grouped by account, always showing all SYNC_FOLDERS per account
       const byAccount: Record<string, Array<{ id: string; label: string; count: number }>> = {};
-      for (const f of folders) {
-        if (!byAccount[f.accountId]) {
-          byAccount[f.accountId] = [];
-        }
-        byAccount[f.accountId].push({
-          id: f.folder,
-          label: folderLabels[f.folder] || f.folder,
-          count: f._count.id,
-        });
+
+      for (const acc of accounts) {
+        byAccount[acc.id] = SYNC_FOLDERS.map((sf) => ({
+          id: sf.graphName,
+          label: folderLabels[sf.graphName] || sf.label,
+          count: countMap[`${acc.id}:${sf.graphName}`] || 0,
+        }));
       }
 
       res.json(byAccount);
