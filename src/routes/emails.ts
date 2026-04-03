@@ -3,7 +3,7 @@ import { EmailCategory, RuleAction } from '@prisma/client';
 import { prisma } from '../index';
 import { fetchEmails, deleteEmail as graphDeleteEmail, moveEmailToInbox, getValidToken } from '../services/graphService';
 import { learnFromAction } from '../services/ruleEngine';
-import { classifyJunkEmails, recordOverride, TriageActionType } from '../services/triageService';
+import { classifyJunkEmails, recordOverride, TriageActionType, TriageClassification } from '../services/triageService';
 
 const router = Router();
 
