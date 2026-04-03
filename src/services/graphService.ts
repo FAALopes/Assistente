@@ -97,26 +97,45 @@ function createGraphClient(accessToken: string): Client {
 
 /**
  * Fetch emails from Microsoft Graph inbox (or specific folder).
+ * Paginates automatically to fetch up to `maxEmails` (default 500).
  */
 export async function fetchEmails(
   accessToken: string,
   folderId?: string,
-  top: number = 50,
-  skip: number = 0,
+  maxEmails: number = 500,
 ): Promise<GraphEmail[]> {
   try {
     const client = createGraphClient(accessToken);
     const folder = folderId || 'inbox';
+    const allEmails: GraphEmail[] = [];
+    const pageSize = Math.min(maxEmails, 200); // Graph API max per request
+    let skip = 0;
 
-    const response = await client
-      .api(`/me/mailFolders/${folder}/messages`)
-      .top(top)
-      .skip(skip)
-      .select('id,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments')
-      .orderby('receivedDateTime desc')
-      .get();
+    while (allEmails.length < maxEmails) {
+      const remaining = maxEmails - allEmails.length;
+      const top = Math.min(pageSize, remaining);
 
-    return response.value || [];
+      const response = await client
+        .api(`/me/mailFolders/${folder}/messages`)
+        .top(top)
+        .skip(skip)
+        .select('id,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments')
+        .orderby('receivedDateTime desc')
+        .get();
+
+      const emails = response.value || [];
+      allEmails.push(...emails);
+
+      // Stop if we got fewer than requested (no more emails)
+      if (emails.length < top) {
+        break;
+      }
+
+      skip += emails.length;
+    }
+
+    console.log(`Fetched ${allEmails.length} emails from folder ${folder}`);
+    return allEmails;
   } catch (error: any) {
     console.error('Error fetching emails from Graph:', error?.message || error);
     throw new Error('Failed to fetch emails from Microsoft Graph');

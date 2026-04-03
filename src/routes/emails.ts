@@ -93,13 +93,18 @@ router.post('/sync', async (_req: Request, res: Response) => {
     let totalSynced = 0;
     const errors: string[] = [];
 
+    console.log(`Starting sync for ${accounts.length} account(s)...`);
+
     for (const account of accounts) {
       try {
+        console.log(`Syncing account: ${account.email}`);
         const accessToken = await getValidToken(account.id);
 
         for (const folder of SYNC_FOLDERS) {
           try {
+            console.log(`  Fetching folder: ${folder.label} (${folder.graphName})`);
             const graphEmails = await fetchEmails(accessToken, folder.graphName);
+            console.log(`  Got ${graphEmails.length} emails from ${folder.label}`);
 
             for (const graphEmail of graphEmails) {
               const fromAddress = graphEmail.from?.emailAddress?.address || 'unknown';
