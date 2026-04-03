@@ -44,24 +44,6 @@ interface TriageItem {
   checked: boolean;
 }
 
-const actionLabels: Record<TriageAction, string> = {
-  DELETE: 'Apagar',
-  MOVE_TO_INBOX: 'Mover para Inbox',
-  REVIEW: 'Rever',
-};
-
-const actionIcons: Record<TriageAction, React.ReactNode> = {
-  DELETE: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
-  MOVE_TO_INBOX: <InboxOutlined style={{ color: '#1677ff' }} />,
-  REVIEW: <EyeOutlined style={{ color: '#faad14' }} />,
-};
-
-const actionColors: Record<TriageAction, string> = {
-  DELETE: 'red',
-  MOVE_TO_INBOX: 'blue',
-  REVIEW: 'orange',
-};
-
 function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
   const [items, setItems] = useState<TriageItem[]>([]);
   const [loading, setLoading] = useState(false);
