@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   Select,
-  Switch,
   Tag,
   Space,
   Typography,
@@ -31,20 +30,30 @@ interface RulesPanelProps {
   onClose: () => void;
 }
 
-const categoryLabels: Record<EmailCategory, string> = {
-  [EmailCategory.INBOX]: 'Caixa de entrada',
-  [EmailCategory.TODO]: 'Tratar depois',
-  [EmailCategory.DELETE]: 'Apagar',
-  [EmailCategory.ARCHIVE]: 'Arquivo',
-  [EmailCategory.ONEDRIVE]: 'OneDrive',
+const actionLabels: Record<string, string> = {
+  DELETE: 'Apagar',
+  TODO: 'Tratar depois',
+  SAVE_LATER: 'Guardar',
+  SAVE_ONEDRIVE: 'OneDrive',
 };
 
-const categoryColors: Record<EmailCategory, string> = {
-  [EmailCategory.INBOX]: 'default',
-  [EmailCategory.TODO]: 'blue',
-  [EmailCategory.DELETE]: 'red',
-  [EmailCategory.ARCHIVE]: 'green',
-  [EmailCategory.ONEDRIVE]: 'cyan',
+const actionColors: Record<string, string> = {
+  DELETE: 'red',
+  TODO: 'blue',
+  SAVE_LATER: 'green',
+  SAVE_ONEDRIVE: 'cyan',
+};
+
+const fieldLabels: Record<string, string> = {
+  FROM: 'De',
+  SUBJECT: 'Assunto',
+  BODY: 'Corpo',
+};
+
+const operatorLabels: Record<string, string> = {
+  CONTAINS: 'contém',
+  EQUALS: 'é igual a',
+  STARTS_WITH: 'começa com',
 };
 
 function RulesPanel({ open, onClose }: RulesPanelProps) {
@@ -71,13 +80,7 @@ function RulesPanel({ open, onClose }: RulesPanelProps) {
     }
   }, [open, fetchRules]);
 
-  const handleCreate = async (values: {
-    name: string;
-    description: string;
-    condition: string;
-    action: EmailCategory;
-    isActive: boolean;
-  }) => {
+  const handleCreate = async (values: any) => {
     try {
       await createRule(values);
       message.success('Regra criada com sucesso');
@@ -127,31 +130,41 @@ function RulesPanel({ open, onClose }: RulesPanelProps) {
             form={form}
             layout="vertical"
             onFinish={handleCreate}
-            initialValues={{ isActive: true }}
           >
             <Form.Item
-              name="name"
-              label="Nome"
-              rules={[{ required: true, message: 'Insira um nome' }]}
+              name="field"
+              label="Campo"
+              rules={[{ required: true, message: 'Selecione o campo' }]}
             >
-              <Input placeholder="Ex: Newsletters para apagar" />
-            </Form.Item>
-            <Form.Item
-              name="description"
-              label="Descricao"
-            >
-              <Input.TextArea
-                placeholder="Descricao opcional da regra"
-                rows={2}
+              <Select
+                placeholder="Selecione o campo"
+                options={[
+                  { value: 'FROM', label: 'De (remetente)' },
+                  { value: 'SUBJECT', label: 'Assunto' },
+                  { value: 'BODY', label: 'Corpo do email' },
+                ]}
               />
             </Form.Item>
             <Form.Item
-              name="condition"
-              label="Condicao"
-              rules={[{ required: true, message: 'Insira uma condicao' }]}
-              help="Ex: from:newsletter@exemplo.com OU subject:promocao"
+              name="operator"
+              label="Operador"
+              rules={[{ required: true, message: 'Selecione o operador' }]}
             >
-              <Input placeholder="Condicao para aplicar a regra" />
+              <Select
+                placeholder="Selecione o operador"
+                options={[
+                  { value: 'CONTAINS', label: 'Contém' },
+                  { value: 'EQUALS', label: 'É igual a' },
+                  { value: 'STARTS_WITH', label: 'Começa com' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              name="value"
+              label="Valor"
+              rules={[{ required: true, message: 'Insira o valor' }]}
+            >
+              <Input placeholder="Ex: newsletter@exemplo.com" />
             </Form.Item>
             <Form.Item
               name="action"
@@ -160,18 +173,13 @@ function RulesPanel({ open, onClose }: RulesPanelProps) {
             >
               <Select
                 placeholder="O que fazer com os emails"
-                options={Object.values(EmailCategory).map((cat) => ({
-                  value: cat,
-                  label: categoryLabels[cat],
-                }))}
+                options={[
+                  { value: 'DELETE', label: 'Apagar' },
+                  { value: 'TODO', label: 'Tratar depois' },
+                  { value: 'SAVE_LATER', label: 'Guardar' },
+                  { value: 'SAVE_ONEDRIVE', label: 'Guardar no OneDrive' },
+                ]}
               />
-            </Form.Item>
-            <Form.Item
-              name="isActive"
-              label="Ativa"
-              valuePropName="checked"
-            >
-              <Switch />
             </Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
@@ -204,10 +212,7 @@ function RulesPanel({ open, onClose }: RulesPanelProps) {
         }}
         renderItem={(rule) => (
           <List.Item
-            style={{
-              padding: '12px 0',
-              opacity: rule.isActive ? 1 : 0.6,
-            }}
+            style={{ padding: '12px 0' }}
             actions={[
               <Popconfirm
                 key="delete"
@@ -234,29 +239,20 @@ function RulesPanel({ open, onClose }: RulesPanelProps) {
                   marginBottom: 4,
                 }}
               >
-                <Text strong>{rule.name}</Text>
-                <Space size={4}>
-                  {!rule.isActive && (
-                    <Tag color="default">Inativa</Tag>
-                  )}
-                  <Tag color={categoryColors[rule.action]}>
-                    {categoryLabels[rule.action]}
-                  </Tag>
-                </Space>
-              </div>
-              {rule.description && (
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {rule.description}
+                <Text strong>
+                  {fieldLabels[rule.field]} {operatorLabels[rule.operator]}
                 </Text>
-              )}
-              <div style={{ marginTop: 4 }}>
-                <Text code style={{ fontSize: 12 }}>
-                  {rule.condition}
-                </Text>
+                <Tag color={actionColors[rule.action]}>
+                  {actionLabels[rule.action]}
+                </Tag>
               </div>
+              <Text code style={{ fontSize: 12 }}>
+                {rule.value}
+              </Text>
               <div style={{ marginTop: 4 }}>
                 <Text type="secondary" style={{ fontSize: 11 }}>
-                  Aplicada {rule.appliedCount} vez{rule.appliedCount !== 1 ? 'es' : ''}
+                  Aplicada {rule.timesApplied} vez{rule.timesApplied !== 1 ? 'es' : ''}
+                  {rule.confidence < 100 && ` | Confianca: ${rule.confidence}%`}
                 </Text>
               </div>
             </div>

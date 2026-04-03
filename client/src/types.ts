@@ -2,20 +2,18 @@ export enum EmailCategory {
   INBOX = 'INBOX',
   TODO = 'TODO',
   DELETE = 'DELETE',
-  ARCHIVE = 'ARCHIVE',
-  ONEDRIVE = 'ONEDRIVE',
+  SAVE_LATER = 'SAVE_LATER',
+  SAVE_ONEDRIVE = 'SAVE_ONEDRIVE',
+  UNCATEGORIZED = 'UNCATEGORIZED',
 }
 
 export interface EmailAccount {
   id: string;
   email: string;
-  provider: 'microsoft' | 'gmail';
-  displayName: string;
-  connected: boolean;
-  lastSyncAt: string | null;
-  unreadCount: number;
+  provider: 'MICROSOFT' | 'GMAIL' | 'IMAP';
+  displayName: string | null;
   createdAt: string;
-  updatedAt: string;
+  _count?: { emails: number };
 }
 
 export interface Email {
@@ -23,30 +21,32 @@ export interface Email {
   accountId: string;
   externalId: string;
   from: string;
-  fromName: string;
-  to: string;
-  subject: string;
-  body: string;
+  to: string | null;
+  subject: string | null;
+  bodyPreview: string | null;
   receivedAt: string;
   isRead: boolean;
+  importance: string | null;
+  hasAttachments: boolean;
   category: EmailCategory;
-  suggestedCategory: EmailCategory | null;
-  suggestionReason: string | null;
-  account?: EmailAccount;
+  categorySetAt: string | null;
   createdAt: string;
-  updatedAt: string;
+  account?: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  };
 }
 
 export interface Rule {
   id: string;
-  name: string;
-  description: string;
-  condition: string;
-  action: EmailCategory;
-  isActive: boolean;
-  appliedCount: number;
+  field: 'FROM' | 'SUBJECT' | 'BODY';
+  operator: 'CONTAINS' | 'EQUALS' | 'STARTS_WITH';
+  value: string;
+  action: 'DELETE' | 'TODO' | 'SAVE_LATER' | 'SAVE_ONEDRIVE';
+  confidence: number;
+  timesApplied: number;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface Suggestion {
@@ -57,7 +57,7 @@ export interface Suggestion {
 }
 
 export interface EmailFilters {
-  accountId?: string;
+  account?: string;
   category?: EmailCategory;
   search?: string;
   page?: number;

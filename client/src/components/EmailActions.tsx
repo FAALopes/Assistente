@@ -76,14 +76,14 @@ function EmailActions({ selectedIds, onActionComplete }: EmailActionsProps) {
           <Button
             type="primary"
             icon={<CheckSquareOutlined />}
-            onClick={() => handleCategory(EmailCategory.ARCHIVE)}
+            onClick={() => handleCategory(EmailCategory.SAVE_LATER)}
           >
-            Arquivar
+            Guardar
           </Button>
           <Button
             style={{ borderColor: '#52c41a', color: '#52c41a' }}
             icon={<CloudUploadOutlined />}
-            onClick={() => handleCategory(EmailCategory.ONEDRIVE)}
+            onClick={() => handleCategory(EmailCategory.SAVE_ONEDRIVE)}
           >
             Guardar OneDrive
           </Button>

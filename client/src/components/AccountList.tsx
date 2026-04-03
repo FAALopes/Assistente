@@ -1,10 +1,8 @@
-import { Badge, Button, List, Space, Tag, Typography } from 'antd';
+import { Button, List, Space, Tag, Typography } from 'antd';
 import {
   WindowsOutlined,
   GoogleOutlined,
   PlusOutlined,
-  CheckCircleFilled,
-  CloseCircleFilled,
 } from '@ant-design/icons';
 import type { EmailAccount } from '../types';
 
@@ -17,13 +15,14 @@ interface AccountListProps {
 }
 
 const providerColors: Record<string, string> = {
-  microsoft: '#0078d4',
-  gmail: '#ea4335',
+  MICROSOFT: '#0078d4',
+  GMAIL: '#ea4335',
+  IMAP: '#8c8c8c',
 };
 
 const providerIcons: Record<string, React.ReactNode> = {
-  microsoft: <WindowsOutlined />,
-  gmail: <GoogleOutlined />,
+  MICROSOFT: <WindowsOutlined />,
+  GMAIL: <GoogleOutlined />,
 };
 
 function AccountList({
@@ -92,34 +91,15 @@ function AccountList({
                     {account.displayName || account.email}
                   </Text>
                 </Space>
-                <Space size={4}>
-                  {account.unreadCount > 0 && (
-                    <Badge
-                      count={account.unreadCount}
-                      size="small"
-                      style={{ backgroundColor: '#1677ff' }}
-                    />
-                  )}
-                  {account.connected ? (
-                    <CheckCircleFilled style={{ color: '#52c41a', fontSize: 12 }} />
-                  ) : (
-                    <CloseCircleFilled style={{ color: '#ff4d4f', fontSize: 12 }} />
-                  )}
-                </Space>
+                {account._count && account._count.emails > 0 && (
+                  <Tag color="blue" style={{ fontSize: 11 }}>
+                    {account._count.emails}
+                  </Tag>
+                )}
               </Space>
               <Text type="secondary" style={{ fontSize: 11 }}>
                 {account.email}
               </Text>
-              {account.lastSyncAt && (
-                <div>
-                  <Tag
-                    style={{ fontSize: 10, marginTop: 4 }}
-                    color="default"
-                  >
-                    Sync: {new Date(account.lastSyncAt).toLocaleString('pt-PT')}
-                  </Tag>
-                </div>
-              )}
             </div>
           </List.Item>
         )}

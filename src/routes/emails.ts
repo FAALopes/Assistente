@@ -55,13 +55,10 @@ router.get('/', async (req: Request, res: Response) => {
     ]);
 
     res.json({
-      emails,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages: Math.ceil(total / limitNum),
-      },
+      data: emails,
+      total,
+      page: pageNum,
+      limit: limitNum,
     });
   } catch (error) {
     console.error('Error fetching emails:', error);

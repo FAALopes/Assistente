@@ -142,9 +142,9 @@ function App() {
         {!collapsed && (
           <AccountList
             accounts={accounts}
-            selectedAccountId={filters.accountId}
+            selectedAccountId={filters.account}
             onSelectAccount={(accountId) =>
-              handleFilterChange({ accountId })
+              handleFilterChange({ account: accountId })
             }
           />
         )}

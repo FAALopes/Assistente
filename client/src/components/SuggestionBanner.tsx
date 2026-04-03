@@ -21,16 +21,18 @@ const categoryLabels: Record<EmailCategory, string> = {
   [EmailCategory.INBOX]: 'Caixa de entrada',
   [EmailCategory.TODO]: 'Tratar depois',
   [EmailCategory.DELETE]: 'Apagar',
-  [EmailCategory.ARCHIVE]: 'Arquivo',
-  [EmailCategory.ONEDRIVE]: 'OneDrive',
+  [EmailCategory.SAVE_LATER]: 'Guardar',
+  [EmailCategory.SAVE_ONEDRIVE]: 'OneDrive',
+  [EmailCategory.UNCATEGORIZED]: 'Sem categoria',
 };
 
 const categoryColors: Record<EmailCategory, string> = {
   [EmailCategory.INBOX]: 'default',
   [EmailCategory.TODO]: 'blue',
   [EmailCategory.DELETE]: 'red',
-  [EmailCategory.ARCHIVE]: 'green',
-  [EmailCategory.ONEDRIVE]: 'cyan',
+  [EmailCategory.SAVE_LATER]: 'green',
+  [EmailCategory.SAVE_ONEDRIVE]: 'cyan',
+  [EmailCategory.UNCATEGORIZED]: 'default',
 };
 
 function SuggestionBanner({ suggestions, emails, onApply }: SuggestionBannerProps) {
@@ -88,7 +90,7 @@ function SuggestionBanner({ suggestions, emails, onApply }: SuggestionBannerProp
                   <Tag color={categoryColors[suggestion.suggestedCategory]}>
                     {categoryLabels[suggestion.suggestedCategory]}
                   </Tag>
-                  <Text strong>{email?.fromName || email?.from || 'Desconhecido'}</Text>
+                  <Text strong>{email?.from || 'Desconhecido'}</Text>
                   <Text type="secondary">
                     {email?.subject || '(sem assunto)'}
                   </Text>

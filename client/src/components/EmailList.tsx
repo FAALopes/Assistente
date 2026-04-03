@@ -29,21 +29,23 @@ const categoryLabels: Record<EmailCategory, string> = {
   [EmailCategory.INBOX]: 'Caixa de entrada',
   [EmailCategory.TODO]: 'Tratar depois',
   [EmailCategory.DELETE]: 'Apagar',
-  [EmailCategory.ARCHIVE]: 'Arquivo',
-  [EmailCategory.ONEDRIVE]: 'OneDrive',
+  [EmailCategory.SAVE_LATER]: 'Guardar',
+  [EmailCategory.SAVE_ONEDRIVE]: 'OneDrive',
+  [EmailCategory.UNCATEGORIZED]: 'Sem categoria',
 };
 
 const categoryColors: Record<EmailCategory, string> = {
   [EmailCategory.INBOX]: 'default',
   [EmailCategory.TODO]: 'blue',
   [EmailCategory.DELETE]: 'red',
-  [EmailCategory.ARCHIVE]: 'green',
-  [EmailCategory.ONEDRIVE]: 'cyan',
+  [EmailCategory.SAVE_LATER]: 'green',
+  [EmailCategory.SAVE_ONEDRIVE]: 'cyan',
+  [EmailCategory.UNCATEGORIZED]: 'default',
 };
 
 const providerIcons: Record<string, React.ReactNode> = {
-  microsoft: <WindowsOutlined style={{ color: '#0078d4' }} />,
-  gmail: <GoogleOutlined style={{ color: '#ea4335' }} />,
+  MICROSOFT: <WindowsOutlined style={{ color: '#0078d4' }} />,
+  GMAIL: <GoogleOutlined style={{ color: '#ea4335' }} />,
 };
 
 function EmailList({
@@ -72,7 +74,7 @@ function EmailList({
       if (suggestion.suggestedCategory === EmailCategory.TODO) {
         return { background: '#e6f4ff' };
       }
-      if (suggestion.suggestedCategory === EmailCategory.ONEDRIVE) {
+      if (suggestion.suggestedCategory === EmailCategory.SAVE_ONEDRIVE) {
         return { background: '#f6ffed' };
       }
     }
@@ -100,7 +102,7 @@ function EmailList({
       ellipsis: true,
       render: (_: unknown, record: Email) => (
         <span style={{ fontWeight: record.isRead ? 400 : 600 }}>
-          {record.fromName || record.from}
+          {record.from}
         </span>
       ),
     },
@@ -162,7 +164,7 @@ function EmailList({
         if (!account) return '-';
         return (
           <Badge
-            color={account.provider === 'microsoft' ? '#0078d4' : '#ea4335'}
+            color={account.provider === 'MICROSOFT' ? '#0078d4' : '#ea4335'}
             text={
               <span style={{ fontSize: 12 }}>{account.email}</span>
             }
@@ -210,8 +212,8 @@ function EmailList({
           allowClear
           style={{ minWidth: 200 }}
           options={accountOptions}
-          value={filters.accountId}
-          onChange={(val) => onFilterChange({ accountId: val })}
+          value={filters.account}
+          onChange={(val) => onFilterChange({ account: val })}
         />
         <Select
           placeholder="Categoria"
