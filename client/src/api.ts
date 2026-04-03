@@ -93,8 +93,8 @@ export async function deleteRule(id: string): Promise<void> {
 export async function getSuggestions(
   emailIds?: string[],
 ): Promise<Suggestion[]> {
-  const { data } = await api.post<Suggestion[]>('/api/rules/suggest', {
+  const { data } = await api.post<{ suggestions: Suggestion[] }>('/api/rules/suggest', {
     emailIds,
   });
-  return data;
+  return data.suggestions || [];
 }
