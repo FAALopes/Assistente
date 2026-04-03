@@ -14,6 +14,9 @@ export const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust Railway's reverse proxy (needed for secure cookies over HTTPS)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(express.json());
 app.use(cors({
@@ -27,6 +30,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
+    sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   },
 }));
