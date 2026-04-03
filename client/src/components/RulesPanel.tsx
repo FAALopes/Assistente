@@ -20,7 +20,6 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { getRules, createRule, deleteRule } from '../api';
-import { EmailCategory } from '../types';
 import type { Rule } from '../types';
 
 const { Text, Title } = Typography;
