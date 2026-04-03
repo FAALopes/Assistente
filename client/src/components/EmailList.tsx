@@ -121,14 +121,32 @@ function EmailList({
     },
     {
       title: 'De',
+      dataIndex: 'from',
       key: 'from',
       width: 220,
       ellipsis: true,
-      render: (_: unknown, record: Email) => (
-        <span style={{ fontWeight: record.isRead ? 400 : 600 }}>
-          {record.from}
-        </span>
-      ),
+      sorter: (a: Email, b: Email) => (a.from || '').localeCompare(b.from || ''),
+      render: (_: unknown, record: Email) => {
+        // Parse "Name <email>" format
+        const match = record.from?.match(/^(.+?)\s*<(.+)>$/);
+        if (match) {
+          return (
+            <div style={{ lineHeight: 1.3 }}>
+              <div style={{ fontWeight: record.isRead ? 400 : 600, fontSize: 13 }}>
+                {match[1]}
+              </div>
+              <div style={{ fontSize: 11, color: '#8c8c8c' }}>
+                {match[2]}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <span style={{ fontWeight: record.isRead ? 400 : 600 }}>
+            {record.from}
+          </span>
+        );
+      },
     },
     {
       title: 'Assunto',

@@ -107,7 +107,11 @@ router.post('/sync', async (_req: Request, res: Response) => {
             console.log(`  Got ${graphEmails.length} emails from ${folder.label}`);
 
             for (const graphEmail of graphEmails) {
-              const fromAddress = graphEmail.from?.emailAddress?.address || 'unknown';
+              const fromName = graphEmail.from?.emailAddress?.name || '';
+              const fromEmail = graphEmail.from?.emailAddress?.address || 'unknown';
+              const fromDisplay = fromName && fromName !== fromEmail
+                ? `${fromName} <${fromEmail}>`
+                : fromEmail;
               const toAddress = graphEmail.toRecipients?.[0]?.emailAddress?.address || null;
 
               await prisma.email.upsert({
@@ -115,7 +119,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
                 create: {
                   externalId: graphEmail.id,
                   accountId: account.id,
-                  from: fromAddress,
+                  from: fromDisplay,
                   to: toAddress,
                   subject: graphEmail.subject || null,
                   bodyPreview: graphEmail.bodyPreview || null,
@@ -128,6 +132,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
                   hasAttachments: graphEmail.hasAttachments || false,
                 },
                 update: {
+                  from: fromDisplay,
                   isRead: graphEmail.isRead || false,
                   importance: graphEmail.importance || null,
                   folder: folder.graphName,
