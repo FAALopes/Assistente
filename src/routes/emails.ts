@@ -17,6 +17,8 @@ router.get('/', async (req: Request, res: Response) => {
       search,
       page = '1',
       limit = '50',
+      sortField,
+      sortOrder,
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -45,10 +47,16 @@ router.get('/', async (req: Request, res: Response) => {
       ];
     }
 
+    // Build sort order
+    const allowedSortFields = ['from', 'subject', 'receivedAt', 'folder', 'category'];
+    const field = typeof sortField === 'string' && allowedSortFields.includes(sortField) ? sortField : 'receivedAt';
+    const direction = sortOrder === 'ascend' ? 'asc' : 'desc';
+    const orderBy = { [field]: direction };
+
     const [emails, total] = await Promise.all([
       prisma.email.findMany({
         where,
-        orderBy: { receivedAt: 'desc' },
+        orderBy,
         take: limitNum,
         skip,
         include: {

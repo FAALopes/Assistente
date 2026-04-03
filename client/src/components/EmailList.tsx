@@ -125,7 +125,8 @@ function EmailList({
       key: 'from',
       width: 220,
       ellipsis: true,
-      sorter: (a: Email, b: Email) => (a.from || '').localeCompare(b.from || ''),
+      sorter: true,
+      sortOrder: filters.sortField === 'from' ? filters.sortOrder : undefined,
       render: (_: unknown, record: Email) => {
         // Parse "Name <email>" format
         const match = record.from?.match(/^(.+?)\s*<(.+)>$/);
@@ -186,6 +187,8 @@ function EmailList({
       key: 'receivedAt',
       width: 150,
       sorter: true,
+      sortOrder: filters.sortField === 'receivedAt' ? filters.sortOrder : undefined,
+      defaultSortOrder: !filters.sortField ? 'descend' as const : undefined,
       render: (date: string) =>
         new Date(date).toLocaleString('pt-PT', {
           day: '2-digit',
@@ -316,6 +319,14 @@ function EmailList({
         onRow={(record) => ({
           style: getRowStyle(record),
         })}
+        onChange={(_pagination, _filters, sorter) => {
+          if (!Array.isArray(sorter) && sorter.columnKey) {
+            onFilterChange({
+              sortField: sorter.order ? (sorter.columnKey as string) : undefined,
+              sortOrder: sorter.order || undefined,
+            });
+          }
+        }}
         pagination={{
           current: filters.page || 1,
           pageSize: filters.limit || 50,

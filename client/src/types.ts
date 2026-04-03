@@ -72,6 +72,8 @@ export interface EmailFilters {
   search?: string;
   page?: number;
   limit?: number;
+  sortField?: string;
+  sortOrder?: 'ascend' | 'descend';
 }
 
 export type TriageAction = 'DELETE' | 'MOVE_TO_INBOX' | 'REVIEW';
