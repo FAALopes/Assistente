@@ -87,8 +87,9 @@ export async function classifyJunkEmails(emails: EmailForTriage[]): Promise<Tria
       try {
         const batchResults = await classifyBatchWithAI(batch);
         results.push(...batchResults);
-      } catch (error) {
-        console.error('AI classification failed for batch:', error);
+      } catch (error: any) {
+        console.error('AI classification failed for batch:', error?.message || error);
+        console.error('Full error:', JSON.stringify(error, null, 2));
         // Fallback: mark all as REVIEW
         for (const email of batch) {
           results.push({

@@ -14,6 +14,7 @@ import {
   Badge,
   Alert,
   Progress,
+  Segmented,
 } from 'antd';
 import {
   DeleteOutlined,
@@ -21,6 +22,7 @@ import {
   EyeOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
+  SortAscendingOutlined,
 } from '@ant-design/icons';
 import type { Email, TriageAction, TriageClassification } from '../types';
 import { triageJunkEmails, executeTriageActions, recordTriageOverride } from '../api';
@@ -50,6 +52,7 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
   const [executing, setExecuting] = useState(false);
   const [activeTab, setActiveTab] = useState<TriageAction>('DELETE');
   const [done, setDone] = useState(false);
+  const [sortBy, setSortBy] = useState<'date' | 'sender' | 'confidence'>('date');
 
   const emailMap = new Map(emails.map(e => [e.id, e]));
 
@@ -131,8 +134,14 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
     );
   };
 
-  const getItemsByAction = (action: TriageAction) =>
-    items.filter(i => i.currentAction === action);
+  const getItemsByAction = (action: TriageAction) => {
+    const filtered = items.filter(i => i.currentAction === action);
+    return filtered.sort((a, b) => {
+      if (sortBy === 'sender') return (a.email.from || '').localeCompare(b.email.from || '');
+      if (sortBy === 'confidence') return b.confidence - a.confidence;
+      return new Date(b.email.receivedAt).getTime() - new Date(a.email.receivedAt).getTime();
+    });
+  };
 
   const getCheckedCount = (action: TriageAction) =>
     items.filter(i => i.currentAction === action && i.checked).length;
@@ -373,6 +382,20 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
             showIcon
             style={{ marginBottom: 16 }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <SortAscendingOutlined style={{ color: '#8c8c8c' }} />
+            <Text type="secondary" style={{ fontSize: 12 }}>Ordenar:</Text>
+            <Segmented
+              size="small"
+              value={sortBy}
+              onChange={(val) => setSortBy(val as 'date' | 'sender' | 'confidence')}
+              options={[
+                { value: 'date', label: 'Data' },
+                { value: 'sender', label: 'Remetente' },
+                { value: 'confidence', label: 'Confiança' },
+              ]}
+            />
+          </div>
           <Tabs
             activeKey={activeTab}
             onChange={(key) => setActiveTab(key as TriageAction)}
