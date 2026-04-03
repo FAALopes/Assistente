@@ -86,7 +86,19 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
     }
 
     const { accessToken, account, expiresOn } = tokenResponse;
-    const refreshToken = (tokenResponse as any).refreshToken || null;
+
+    // Extract refresh token from MSAL cache
+    let refreshToken: string | null = null;
+    try {
+      const cacheData = JSON.parse(msalClient.getTokenCache().serialize());
+      const refreshTokens = cacheData.RefreshToken || {};
+      const refreshTokenEntry = Object.values(refreshTokens)[0] as any;
+      if (refreshTokenEntry?.secret) {
+        refreshToken = refreshTokenEntry.secret;
+      }
+    } catch (cacheErr) {
+      console.warn('Could not extract refresh token from MSAL cache:', cacheErr);
+    }
 
     // Fetch user profile from Graph
     const profileRes = await fetch('https://graph.microsoft.com/v1.0/me', {
