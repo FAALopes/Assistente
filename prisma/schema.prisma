@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Provider {
+  MICROSOFT
+  GMAIL
+  IMAP
+}
+
+enum EmailCategory {
+  INBOX
+  DELETE
+  TODO
+  SAVE_LATER
+  SAVE_ONEDRIVE
+  UNCATEGORIZED
+}
+
+enum RuleField {
+  FROM
+  SUBJECT
+  BODY
+}
+
+enum RuleOperator {
+  CONTAINS
+  EQUALS
+  STARTS_WITH
+}
+
+enum RuleAction {
+  DELETE
+  TODO
+  SAVE_LATER
+  SAVE_ONEDRIVE
+}
+
+model EmailAccount {
+  id           String    @id @default(uuid())
+  email        String
+  displayName  String?
+  provider     Provider
+  accessToken  String
+  refreshToken String?
+  tokenExpiry  DateTime?
+  userId       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  emails       Email[]
+
+  @@map("email_accounts")
+}
+
+model Email {
+  id             String        @id @default(uuid())
+  externalId     String        @unique
+  accountId      String
+  account        EmailAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  from           String
+  to             String?
+  subject        String?
+  bodyPreview    String?
+  receivedAt     DateTime
+  isRead         Boolean       @default(false)
+  importance     String?
+  hasAttachments Boolean       @default(false)
+  category       EmailCategory @default(UNCATEGORIZED)
+  categorySetAt  DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([accountId])
+  @@index([category])
+  @@index([receivedAt])
+  @@map("emails")
+}
+
+model Rule {
+  id           String       @id @default(uuid())
+  field        RuleField
+  operator     RuleOperator
+  value        String
+  action       RuleAction
+  confidence   Int          @default(100)
+  timesApplied Int          @default(0)
+  createdAt    DateTime     @default(now())
+
+  @@map("rules")
+}
