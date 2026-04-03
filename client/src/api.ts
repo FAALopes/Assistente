@@ -109,8 +109,8 @@ export async function getSuggestions(
 }
 
 // Triage
-export async function triageJunkEmails(accountId?: string): Promise<TriageResult> {
-  const { data } = await api.post<TriageResult>('/api/emails/triage', { accountId });
+export async function triageJunkEmails(accountId?: string, forceReclassify?: boolean): Promise<TriageResult> {
+  const { data } = await api.post<TriageResult>('/api/emails/triage', { accountId, forceReclassify });
   return data;
 }
 

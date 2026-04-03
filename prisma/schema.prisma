@@ -79,6 +79,10 @@ model Email {
   hasAttachments Boolean       @default(false)
   category       EmailCategory @default(UNCATEGORIZED)
   categorySetAt  DateTime?
+  triageAction   TriageAction?
+  triageReason   String?
+  triageConfidence Int?
+  triageClassifiedAt DateTime?
   createdAt      DateTime      @default(now())
 
   @@index([accountId])

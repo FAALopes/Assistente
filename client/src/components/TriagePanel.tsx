@@ -56,11 +56,14 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
 
   const emailMap = new Map(emails.map(e => [e.id, e]));
 
-  const runTriage = useCallback(async () => {
+  const [cacheInfo, setCacheInfo] = useState<{ fromCache: number; newlyClassified: number } | null>(null);
+
+  const runTriage = useCallback(async (forceReclassify = false) => {
     setLoading(true);
     setDone(false);
+    setCacheInfo(null);
     try {
-      const result = await triageJunkEmails();
+      const result = await triageJunkEmails(undefined, forceReclassify);
       const triageItems: TriageItem[] = result.classifications
         .map((c: TriageClassification) => {
           const email = emailMap.get(c.emailId);
@@ -78,6 +81,10 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
         .filter((item): item is TriageItem => item !== null);
 
       setItems(triageItems);
+      setCacheInfo({
+        fromCache: result.fromCache || 0,
+        newlyClassified: result.newlyClassified || 0,
+      });
 
       // Set active tab to the one with most items
       const counts = { DELETE: 0, MOVE_TO_INBOX: 0, REVIEW: 0 };
@@ -378,9 +385,27 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
           <Alert
             type="info"
             message={`${items.length} emails analisados`}
-            description="Reveja as classificacoes abaixo. Pode alterar a acao de cada email antes de executar."
+            description={
+              cacheInfo
+                ? cacheInfo.newlyClassified > 0
+                  ? `${cacheInfo.fromCache} do cache, ${cacheInfo.newlyClassified} classificados agora pela IA. Reveja as classificações abaixo.`
+                  : `Todos do cache (sem custo IA). Reveja as classificações abaixo.`
+                : 'Reveja as classificações abaixo. Pode alterar a ação de cada email antes de executar.'
+            }
             showIcon
             style={{ marginBottom: 16 }}
+            action={
+              cacheInfo && cacheInfo.fromCache > 0 ? (
+                <Button
+                  size="small"
+                  type="link"
+                  danger
+                  onClick={() => runTriage(true)}
+                >
+                  Reclassificar tudo (usa IA)
+                </Button>
+              ) : undefined
+            }
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <SortAscendingOutlined style={{ color: '#8c8c8c' }} />

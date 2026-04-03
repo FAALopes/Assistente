@@ -382,10 +382,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/emails/triage - Classify junk emails with AI
+// POST /api/emails/triage - Classify junk emails with AI (with cache)
 router.post('/triage', async (req: Request, res: Response) => {
   try {
-    const { accountId } = req.body;
+    const { accountId, forceReclassify } = req.body;
 
     const where: any = { folder: 'junkemail' };
     if (accountId) where.accountId = accountId;
@@ -400,19 +400,67 @@ router.post('/triage', async (req: Request, res: Response) => {
         subject: true,
         bodyPreview: true,
         receivedAt: true,
+        triageAction: true,
+        triageReason: true,
+        triageConfidence: true,
+        triageClassifiedAt: true,
       },
     });
 
     if (junkEmails.length === 0) {
-      res.json({ classifications: [], total: 0 });
+      res.json({ classifications: [], total: 0, fromCache: 0, newlyClassified: 0 });
       return;
     }
 
-    const classifications = await classifyJunkEmails(junkEmails);
+    // Separate already-classified from needing AI
+    const cached: TriageClassification[] = [];
+    const needsClassification: typeof junkEmails = [];
+
+    for (const email of junkEmails) {
+      if (!forceReclassify && email.triageAction && email.triageClassifiedAt) {
+        cached.push({
+          emailId: email.id,
+          action: email.triageAction as TriageActionType,
+          reason: email.triageReason || '',
+          confidence: email.triageConfidence || 50,
+        });
+      } else {
+        needsClassification.push(email);
+      }
+    }
+
+    console.log(`Triage: ${cached.length} from cache, ${needsClassification.length} need AI classification`);
+
+    // Only call AI for unclassified emails
+    let newClassifications: TriageClassification[] = [];
+    if (needsClassification.length > 0) {
+      newClassifications = await classifyJunkEmails(needsClassification);
+
+      // Save classifications to DB
+      for (const c of newClassifications) {
+        try {
+          await prisma.email.update({
+            where: { id: c.emailId },
+            data: {
+              triageAction: c.action as any,
+              triageReason: c.reason,
+              triageConfidence: c.confidence,
+              triageClassifiedAt: new Date(),
+            },
+          });
+        } catch (saveErr: any) {
+          console.error(`Failed to save triage for email ${c.emailId}:`, saveErr.message);
+        }
+      }
+    }
+
+    const allClassifications = [...cached, ...newClassifications];
 
     res.json({
-      classifications,
+      classifications: allClassifications,
       total: junkEmails.length,
+      fromCache: cached.length,
+      newlyClassified: needsClassification.length,
     });
   } catch (error) {
     console.error('Error triaging emails:', error);

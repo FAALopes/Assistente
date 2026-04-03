@@ -88,6 +88,8 @@ export interface TriageClassification {
 export interface TriageResult {
   classifications: TriageClassification[];
   total: number;
+  fromCache?: number;
+  newlyClassified?: number;
 }
 
 export interface TriageExecuteResult {
