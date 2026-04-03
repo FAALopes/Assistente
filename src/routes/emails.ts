@@ -161,13 +161,10 @@ router.post('/sync', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/emails/folders - List available folders
-router.get('/folders', async (_req: Request, res: Response) => {
+// GET /api/emails/folders - List available folders (optionally per account)
+router.get('/folders', async (req: Request, res: Response) => {
   try {
-    const folders = await prisma.email.groupBy({
-      by: ['folder'],
-      _count: { id: true },
-    });
+    const { account } = req.query;
 
     const folderLabels: Record<string, string> = {
       inbox: 'Inbox',
@@ -178,13 +175,43 @@ router.get('/folders', async (_req: Request, res: Response) => {
       archive: 'Arquivo',
     };
 
-    const result = folders.map((f) => ({
-      id: f.folder,
-      label: folderLabels[f.folder] || f.folder,
-      count: f._count.id,
-    }));
+    if (account && typeof account === 'string') {
+      // Return folders for a specific account
+      const folders = await prisma.email.groupBy({
+        by: ['folder'],
+        where: { accountId: account },
+        _count: { id: true },
+      });
 
-    res.json(result);
+      const result = folders.map((f) => ({
+        id: f.folder,
+        label: folderLabels[f.folder] || f.folder,
+        count: f._count.id,
+      }));
+
+      res.json(result);
+    } else {
+      // Return folders grouped by account
+      const folders = await prisma.email.groupBy({
+        by: ['accountId', 'folder'],
+        _count: { id: true },
+      });
+
+      // Build a map: accountId -> folders[]
+      const byAccount: Record<string, Array<{ id: string; label: string; count: number }>> = {};
+      for (const f of folders) {
+        if (!byAccount[f.accountId]) {
+          byAccount[f.accountId] = [];
+        }
+        byAccount[f.accountId].push({
+          id: f.folder,
+          label: folderLabels[f.folder] || f.folder,
+          count: f._count.id,
+        });
+      }
+
+      res.json(byAccount);
+    }
   } catch (error) {
     console.error('Error fetching folders:', error);
     res.status(500).json({ error: 'Failed to fetch folders' });

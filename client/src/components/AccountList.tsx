@@ -8,13 +8,13 @@ import {
   SendOutlined,
   FolderOutlined,
 } from '@ant-design/icons';
-import type { EmailAccount, EmailFolder } from '../types';
+import type { EmailAccount, FoldersByAccount } from '../types';
 
 const { Text } = Typography;
 
 interface AccountListProps {
   accounts: EmailAccount[];
-  folders: EmailFolder[];
+  foldersByAccount: FoldersByAccount;
   selectedAccountId?: string;
   selectedFolder?: string;
   onSelectAccount: (accountId: string | undefined) => void;
@@ -52,7 +52,7 @@ const folderColors: Record<string, string> = {
 
 function AccountList({
   accounts,
-  folders,
+  foldersByAccount,
   selectedAccountId,
   selectedFolder,
   onSelectAccount,
@@ -143,7 +143,7 @@ function AccountList({
 
               {/* Folder sub-items */}
               <div style={{ paddingLeft: 20, marginTop: 2 }}>
-                {folders.map((folder) => {
+                {(foldersByAccount[account.id] || []).map((folder) => {
                   const isFolderSelected =
                     selectedAccountId === account.id && selectedFolder === folder.id;
                   const icon = folderIcons[folder.id] || <FolderOutlined />;

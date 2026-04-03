@@ -2,7 +2,7 @@ import axios from 'axios';
 import type {
   EmailAccount,
   Email,
-  EmailFolder,
+  FoldersByAccount,
   Rule,
   Suggestion,
   EmailCategory,
@@ -36,8 +36,8 @@ export async function getEmails(
   return data;
 }
 
-export async function getFolders(): Promise<EmailFolder[]> {
-  const { data } = await api.get<EmailFolder[]>('/api/emails/folders');
+export async function getFoldersByAccount(): Promise<FoldersByAccount> {
+  const { data } = await api.get<FoldersByAccount>('/api/emails/folders');
   return data;
 }
 

@@ -45,6 +45,8 @@ export interface EmailFolder {
   count: number;
 }
 
+export type FoldersByAccount = Record<string, EmailFolder[]>;
+
 export interface Rule {
   id: string;
   field: 'FROM' | 'SUBJECT' | 'BODY';

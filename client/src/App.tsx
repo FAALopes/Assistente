@@ -11,11 +11,11 @@ import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
 import TriagePanel from './components/TriagePanel';
-import { getAccounts, getEmails, getFolders, syncEmails, getSuggestions } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions } from './api';
 import type {
   EmailAccount,
   Email,
-  EmailFolder,
+  FoldersByAccount,
   Suggestion,
   EmailCategory,
   EmailFilters,
@@ -29,7 +29,7 @@ function App() {
   const [emails, setEmails] = useState<Email[]>([]);
   const [total, setTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [folders, setFolders] = useState<EmailFolder[]>([]);
+  const [foldersByAccount, setFoldersByAccount] = useState<FoldersByAccount>({});
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -42,6 +42,10 @@ function App() {
   const isJunkFolder = filters.folder === 'junkemail';
   const [collapsed, setCollapsed] = useState(false);
 
+  // Flatten folders for EmailList (unique by id)
+  const allFolders = Object.values(foldersByAccount).flat()
+    .filter((f, i, arr) => arr.findIndex(x => x.id === f.id) === i);
+
   const fetchAccounts = useCallback(async () => {
     try {
       const data = await getAccounts();
@@ -53,8 +57,8 @@ function App() {
 
   const fetchFolders = useCallback(async () => {
     try {
-      const data = await getFolders();
-      setFolders(data);
+      const data = await getFoldersByAccount();
+      setFoldersByAccount(data);
     } catch {
       // Silently fail
     }
@@ -159,7 +163,7 @@ function App() {
         {!collapsed && (
           <AccountList
             accounts={accounts}
-            folders={folders}
+            foldersByAccount={foldersByAccount}
             selectedAccountId={filters.account}
             selectedFolder={filters.folder}
             onSelectAccount={(accountId) =>
@@ -235,7 +239,7 @@ function App() {
             <EmailList
               emails={emails}
               accounts={accounts}
-              folders={folders}
+              folders={allFolders}
               suggestions={suggestions}
               total={total}
               filters={filters}
