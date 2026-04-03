@@ -2,6 +2,7 @@ import axios from 'axios';
 import type {
   EmailAccount,
   Email,
+  EmailFolder,
   Rule,
   Suggestion,
   EmailCategory,
@@ -29,6 +30,11 @@ export async function getEmails(
   const { data } = await api.get<PaginatedResponse<Email>>('/api/emails', {
     params,
   });
+  return data;
+}
+
+export async function getFolders(): Promise<EmailFolder[]> {
+  const { data } = await api.get<EmailFolder[]>('/api/emails/folders');
   return data;
 }
 

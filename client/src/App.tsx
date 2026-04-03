@@ -9,10 +9,11 @@ import EmailList from './components/EmailList';
 import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
-import { getAccounts, getEmails, syncEmails, getSuggestions } from './api';
+import { getAccounts, getEmails, getFolders, syncEmails, getSuggestions } from './api';
 import type {
   EmailAccount,
   Email,
+  EmailFolder,
   Suggestion,
   EmailCategory,
   EmailFilters,
@@ -26,6 +27,7 @@ function App() {
   const [emails, setEmails] = useState<Email[]>([]);
   const [total, setTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [folders, setFolders] = useState<EmailFolder[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -42,6 +44,15 @@ function App() {
       setAccounts(data);
     } catch {
       message.error('Erro ao carregar contas');
+    }
+  }, []);
+
+  const fetchFolders = useCallback(async () => {
+    try {
+      const data = await getFolders();
+      setFolders(data);
+    } catch {
+      // Silently fail
     }
   }, []);
 
@@ -69,8 +80,9 @@ function App() {
 
   useEffect(() => {
     fetchAccounts();
+    fetchFolders();
     fetchSuggestions();
-  }, [fetchAccounts, fetchSuggestions]);
+  }, [fetchAccounts, fetchFolders, fetchSuggestions]);
 
   useEffect(() => {
     fetchEmails();
@@ -83,6 +95,7 @@ function App() {
       message.success(`${result.synced} emails sincronizados`);
       fetchEmails();
       fetchAccounts();
+      fetchFolders();
       fetchSuggestions();
     } catch {
       message.error('Erro ao sincronizar emails');
@@ -203,6 +216,7 @@ function App() {
             <EmailList
               emails={emails}
               accounts={accounts}
+              folders={folders}
               suggestions={suggestions}
               total={total}
               filters={filters}

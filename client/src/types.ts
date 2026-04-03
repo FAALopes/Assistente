@@ -24,6 +24,7 @@ export interface Email {
   to: string | null;
   subject: string | null;
   bodyPreview: string | null;
+  folder: string;
   receivedAt: string;
   isRead: boolean;
   importance: string | null;
@@ -36,6 +37,12 @@ export interface Email {
     email: string;
     displayName: string | null;
   };
+}
+
+export interface EmailFolder {
+  id: string;
+  label: string;
+  count: number;
 }
 
 export interface Rule {
@@ -58,6 +65,7 @@ export interface Suggestion {
 
 export interface EmailFilters {
   account?: string;
+  folder?: string;
   category?: EmailCategory;
   search?: string;
   page?: number;

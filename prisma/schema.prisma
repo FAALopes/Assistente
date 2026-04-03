@@ -66,6 +66,7 @@ model Email {
   to             String?
   subject        String?
   bodyPreview    String?
+  folder         String        @default("inbox")
   receivedAt     DateTime
   isRead         Boolean       @default(false)
   importance     String?
@@ -77,6 +78,7 @@ model Email {
   @@index([accountId])
   @@index([category])
   @@index([receivedAt])
+  @@index([folder])
   @@map("emails")
 }
 

@@ -12,6 +12,7 @@ router.get('/', async (req: Request, res: Response) => {
     const {
       account,
       category,
+      folder,
       search,
       page = '1',
       limit = '50',
@@ -25,6 +26,10 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (account && typeof account === 'string') {
       where.accountId = account;
+    }
+
+    if (folder && typeof folder === 'string') {
+      where.folder = folder;
     }
 
     if (category && typeof category === 'string') {
@@ -66,6 +71,12 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// Folders to sync for each Microsoft account
+const SYNC_FOLDERS = [
+  { graphName: 'inbox', label: 'Inbox' },
+  { graphName: 'junkemail', label: 'E-mail de Lixo' },
+];
+
 // GET /api/emails/sync - Sync emails from all accounts
 router.post('/sync', async (_req: Request, res: Response) => {
   try {
@@ -84,35 +95,46 @@ router.post('/sync', async (_req: Request, res: Response) => {
     for (const account of accounts) {
       try {
         const accessToken = await getValidToken(account.id);
-        const graphEmails = await fetchEmails(accessToken);
 
-        for (const graphEmail of graphEmails) {
-          const fromAddress = graphEmail.from?.emailAddress?.address || 'unknown';
-          const toAddress = graphEmail.toRecipients?.[0]?.emailAddress?.address || null;
+        for (const folder of SYNC_FOLDERS) {
+          try {
+            const graphEmails = await fetchEmails(accessToken, folder.graphName);
 
-          await prisma.email.upsert({
-            where: { externalId: graphEmail.id },
-            create: {
-              externalId: graphEmail.id,
-              accountId: account.id,
-              from: fromAddress,
-              to: toAddress,
-              subject: graphEmail.subject || null,
-              bodyPreview: graphEmail.bodyPreview || null,
-              receivedAt: graphEmail.receivedDateTime
-                ? new Date(graphEmail.receivedDateTime)
-                : new Date(),
-              isRead: graphEmail.isRead || false,
-              importance: graphEmail.importance || null,
-              hasAttachments: graphEmail.hasAttachments || false,
-            },
-            update: {
-              isRead: graphEmail.isRead || false,
-              importance: graphEmail.importance || null,
-            },
-          });
+            for (const graphEmail of graphEmails) {
+              const fromAddress = graphEmail.from?.emailAddress?.address || 'unknown';
+              const toAddress = graphEmail.toRecipients?.[0]?.emailAddress?.address || null;
 
-          totalSynced++;
+              await prisma.email.upsert({
+                where: { externalId: graphEmail.id },
+                create: {
+                  externalId: graphEmail.id,
+                  accountId: account.id,
+                  from: fromAddress,
+                  to: toAddress,
+                  subject: graphEmail.subject || null,
+                  bodyPreview: graphEmail.bodyPreview || null,
+                  folder: folder.graphName,
+                  receivedAt: graphEmail.receivedDateTime
+                    ? new Date(graphEmail.receivedDateTime)
+                    : new Date(),
+                  isRead: graphEmail.isRead || false,
+                  importance: graphEmail.importance || null,
+                  hasAttachments: graphEmail.hasAttachments || false,
+                },
+                update: {
+                  isRead: graphEmail.isRead || false,
+                  importance: graphEmail.importance || null,
+                  folder: folder.graphName,
+                },
+              });
+
+              totalSynced++;
+            }
+          } catch (folderErr: any) {
+            const msg = `Failed to sync folder ${folder.label} for ${account.email}: ${folderErr.message}`;
+            console.error(msg);
+            errors.push(msg);
+          }
         }
       } catch (err: any) {
         const msg = `Failed to sync account ${account.email}: ${err.message}`;
@@ -130,6 +152,36 @@ router.post('/sync', async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('Error syncing emails:', error);
     res.status(500).json({ error: 'Failed to sync emails' });
+  }
+});
+
+// GET /api/emails/folders - List available folders
+router.get('/folders', async (_req: Request, res: Response) => {
+  try {
+    const folders = await prisma.email.groupBy({
+      by: ['folder'],
+      _count: { id: true },
+    });
+
+    const folderLabels: Record<string, string> = {
+      inbox: 'Inbox',
+      junkemail: 'E-mail de Lixo',
+      sentitems: 'Enviados',
+      drafts: 'Rascunhos',
+      deleteditems: 'Eliminados',
+      archive: 'Arquivo',
+    };
+
+    const result = folders.map((f) => ({
+      id: f.folder,
+      label: folderLabels[f.folder] || f.folder,
+      count: f._count.id,
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching folders:', error);
+    res.status(500).json({ error: 'Failed to fetch folders' });
   }
 });
 

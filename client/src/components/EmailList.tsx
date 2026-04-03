@@ -9,6 +9,7 @@ import { EmailCategory } from '../types';
 import type {
   Email,
   EmailAccount,
+  EmailFolder,
   Suggestion,
   EmailFilters,
 } from '../types';
@@ -16,6 +17,7 @@ import type {
 interface EmailListProps {
   emails: Email[];
   accounts: EmailAccount[];
+  folders: EmailFolder[];
   suggestions: Suggestion[];
   total: number;
   filters: EmailFilters;
@@ -48,9 +50,19 @@ const providerIcons: Record<string, React.ReactNode> = {
   GMAIL: <GoogleOutlined style={{ color: '#ea4335' }} />,
 };
 
+const folderLabels: Record<string, string> = {
+  inbox: 'Inbox',
+  junkemail: 'E-mail de Lixo',
+  sentitems: 'Enviados',
+  drafts: 'Rascunhos',
+  deleteditems: 'Eliminados',
+  archive: 'Arquivo',
+};
+
 function EmailList({
   emails,
   accounts,
+  folders,
   suggestions,
   total,
   filters,
@@ -154,6 +166,15 @@ function EmailList({
         }),
     },
     {
+      title: 'Pasta',
+      dataIndex: 'folder',
+      key: 'folder',
+      width: 130,
+      render: (folder: string) => (
+        <Tag>{folderLabels[folder] || folder}</Tag>
+      ),
+    },
+    {
       title: 'Conta',
       dataIndex: 'accountId',
       key: 'account',
@@ -177,6 +198,11 @@ function EmailList({
   const categoryOptions = Object.values(EmailCategory).map((cat) => ({
     value: cat,
     label: categoryLabels[cat],
+  }));
+
+  const folderOptions = folders.map((f) => ({
+    value: f.id,
+    label: `${f.label} (${f.count})`,
   }));
 
   const accountOptions = accounts.map((a) => ({
@@ -214,6 +240,14 @@ function EmailList({
           options={accountOptions}
           value={filters.account}
           onChange={(val) => onFilterChange({ account: val })}
+        />
+        <Select
+          placeholder="Pasta"
+          allowClear
+          style={{ minWidth: 160 }}
+          options={folderOptions}
+          value={filters.folder}
+          onChange={(val) => onFilterChange({ folder: val })}
         />
         <Select
           placeholder="Categoria"
