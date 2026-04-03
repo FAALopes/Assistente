@@ -77,6 +77,13 @@ function EmailList({
 
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
+  const folderRowColors: Record<string, string> = {
+    junkemail: '#fff1f0',
+    sentitems: '#f6ffed',
+    drafts: '#fffbe6',
+    deleteditems: '#f5f5f5',
+  };
+
   const getRowStyle = (record: Email): React.CSSProperties => {
     const suggestion = suggestionMap.get(record.id);
     if (suggestion) {
@@ -89,6 +96,11 @@ function EmailList({
       if (suggestion.suggestedCategory === EmailCategory.SAVE_ONEDRIVE) {
         return { background: '#f6ffed' };
       }
+    }
+    // Folder-based coloring
+    const folderBg = folderRowColors[record.folder];
+    if (folderBg) {
+      return { background: folderBg, ...(record.isRead ? {} : { fontWeight: 600 }) };
     }
     if (!record.isRead) {
       return { fontWeight: 600 };
@@ -169,10 +181,22 @@ function EmailList({
       title: 'Pasta',
       dataIndex: 'folder',
       key: 'folder',
-      width: 130,
-      render: (folder: string) => (
-        <Tag>{folderLabels[folder] || folder}</Tag>
-      ),
+      width: 140,
+      render: (folder: string) => {
+        const colorMap: Record<string, string> = {
+          inbox: 'blue',
+          junkemail: 'red',
+          sentitems: 'green',
+          drafts: 'orange',
+          deleteditems: 'default',
+          archive: 'purple',
+        };
+        return (
+          <Tag color={colorMap[folder] || 'default'}>
+            {folderLabels[folder] || folder}
+          </Tag>
+        );
+      },
     },
     {
       title: 'Conta',

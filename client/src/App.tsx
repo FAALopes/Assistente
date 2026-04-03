@@ -155,9 +155,14 @@ function App() {
         {!collapsed && (
           <AccountList
             accounts={accounts}
+            folders={folders}
             selectedAccountId={filters.account}
+            selectedFolder={filters.folder}
             onSelectAccount={(accountId) =>
               handleFilterChange({ account: accountId })
+            }
+            onSelectFolder={(folder) =>
+              handleFilterChange({ folder })
             }
           />
         )}
