@@ -35,11 +35,11 @@ function App() {
   const [syncing, setSyncing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
-  const isJunkFolder = filters.folder === 'junkemail';
   const [filters, setFilters] = useState<EmailFilters>({
     page: 1,
     limit: 50,
   });
+  const isJunkFolder = filters.folder === 'junkemail';
   const [collapsed, setCollapsed] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
