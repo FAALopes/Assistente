@@ -18,7 +18,7 @@ const api = axios.create({
 
 // Accounts
 export async function getAccounts(): Promise<EmailAccount[]> {
-  const { data } = await api.get<EmailAccount[]>('/api/accounts');
+  const { data } = await api.get<EmailAccount[]>('/auth/accounts');
   return data;
 }
 
@@ -93,7 +93,7 @@ export async function deleteRule(id: string): Promise<void> {
 export async function getSuggestions(
   emailIds?: string[],
 ): Promise<Suggestion[]> {
-  const { data } = await api.post<Suggestion[]>('/api/suggestions', {
+  const { data } = await api.post<Suggestion[]>('/api/rules/suggest', {
     emailIds,
   });
   return data;

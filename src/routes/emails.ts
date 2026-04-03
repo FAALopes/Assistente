@@ -70,7 +70,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/emails/sync - Sync emails from all accounts
-router.get('/sync', async (_req: Request, res: Response) => {
+router.post('/sync', async (_req: Request, res: Response) => {
   try {
     const accounts = await prisma.emailAccount.findMany({
       where: { provider: 'MICROSOFT' },
@@ -191,6 +191,65 @@ router.patch('/:id/category', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error updating email category:', error);
     res.status(500).json({ error: 'Failed to update email category' });
+  }
+});
+
+// PATCH /api/emails/bulk/category - Bulk update category
+router.patch('/bulk/category', async (req: Request, res: Response) => {
+  try {
+    const { ids, category } = req.body;
+
+    if (!ids || !Array.isArray(ids) || !category) {
+      res.status(400).json({ error: 'ids (array) and category are required' });
+      return;
+    }
+
+    const result = await prisma.email.updateMany({
+      where: { id: { in: ids } },
+      data: { category },
+    });
+
+    res.json({ updated: result.count });
+  } catch (error) {
+    console.error('Error bulk updating category:', error);
+    res.status(500).json({ error: 'Failed to bulk update category' });
+  }
+});
+
+// POST /api/emails/bulk/delete - Bulk delete emails
+router.post('/bulk/delete', async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids)) {
+      res.status(400).json({ error: 'ids (array) is required' });
+      return;
+    }
+
+    const emails = await prisma.email.findMany({
+      where: { id: { in: ids } },
+      include: { account: true },
+    });
+
+    // Try to delete from Graph for each email
+    for (const email of emails) {
+      try {
+        const accessToken = await getValidToken(email.accountId);
+        await graphDeleteEmail(accessToken, email.externalId);
+      } catch (graphError: any) {
+        console.error(`Graph delete error for ${email.id}:`, graphError.message);
+      }
+    }
+
+    // Remove from local DB
+    const result = await prisma.email.deleteMany({
+      where: { id: { in: ids } },
+    });
+
+    res.json({ deleted: result.count });
+  } catch (error) {
+    console.error('Error bulk deleting emails:', error);
+    res.status(500).json({ error: 'Failed to bulk delete emails' });
   }
 });
 
