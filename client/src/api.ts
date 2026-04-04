@@ -11,6 +11,7 @@ import type {
   TriageAction,
   TriageResult,
   TriageExecuteResult,
+  RulePreviewResult,
 } from './types';
 
 const api = axios.create({
@@ -127,4 +128,22 @@ export async function recordTriageOverride(
   userDecision: TriageAction,
 ): Promise<void> {
   await api.post('/api/emails/triage/override', { emailId, aiDecision, userDecision });
+}
+
+// Check if sender has a rule
+export async function checkSenderRule(senderAddress: string): Promise<{ hasRule: boolean }> {
+  const { data } = await api.post<{ hasRule: boolean; rules: Rule[] }>('/api/rules/check-sender', { senderAddress });
+  return data;
+}
+
+// Preview rule application
+export async function previewRuleApplication(): Promise<RulePreviewResult> {
+  const { data } = await api.post<RulePreviewResult>('/api/rules/preview-apply');
+  return data;
+}
+
+// Apply rules
+export async function applyRules(): Promise<{ applied: number }> {
+  const { data } = await api.post<{ applied: number }>('/api/rules/apply');
+  return data;
 }

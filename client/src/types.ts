@@ -105,3 +105,15 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
 }
+
+export interface RulePreviewMatch {
+  rule: Rule;
+  emails: Array<{ id: string; from: string; subject: string; receivedAt: string }>;
+  action: string;
+  count: number;
+}
+
+export interface RulePreviewResult {
+  matches: RulePreviewMatch[];
+  totalMatched: number;
+}

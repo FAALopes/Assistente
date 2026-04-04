@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Layout, Button, Typography, Space, message, Spin } from 'antd';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Layout, Button, Typography, Space, message, Spin, Modal } from 'antd';
 import {
   SyncOutlined,
   SettingOutlined,
   ThunderboltOutlined,
+  FilterOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
 import EmailList from './components/EmailList';
@@ -11,7 +12,8 @@ import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
 import TriagePanel from './components/TriagePanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail } from './api';
+import RulePreviewModal from './components/RulePreviewModal';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, checkSenderRule, createRule, previewRuleApplication, applyRules } from './api';
 import type {
   EmailAccount,
   Email,
@@ -19,6 +21,7 @@ import type {
   Suggestion,
   EmailCategory,
   EmailFilters,
+  RulePreviewResult,
 } from './types';
 
 const { Header, Sider, Content } = Layout;
@@ -35,6 +38,10 @@ function App() {
   const [syncing, setSyncing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
+  const [rulePreviewOpen, setRulePreviewOpen] = useState(false);
+  const [rulePreviewData, setRulePreviewData] = useState<RulePreviewResult | null>(null);
+  const [rulePreviewLoading, setRulePreviewLoading] = useState(false);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [filters, setFilters] = useState<EmailFilters>({
     page: 1,
     limit: 50,
@@ -125,14 +132,126 @@ function App() {
 
   const handleDeleteEmail = async (id: string) => {
     try {
-      await deleteEmail(id);
-      message.success('Email apagado');
-      fetchEmails();
-      fetchFolders();
+      // Find the email to get sender info
+      const email = emails.find((e) => e.id === id);
+      if (!email) {
+        await deleteEmail(id);
+        message.success('Email apagado');
+        fetchEmails();
+        fetchFolders();
+        return;
+      }
+
+      // Extract sender email address from "Name <email>" format
+      const senderAddress = email.from.match(/<(.+)>$/)?.[1] || email.from;
+
+      // Check if a rule already exists for this sender
+      const { hasRule } = await checkSenderRule(senderAddress);
+
+      if (!hasRule) {
+        // Show modal asking to create rule
+        Modal.confirm({
+          title: 'Criar regra automática?',
+          content: `Criar regra para apagar sempre emails de ${senderAddress}?`,
+          okText: 'Sim, criar regra',
+          cancelText: 'Não, apenas apagar',
+          onOk: async () => {
+            try {
+              await createRule({
+                field: 'FROM',
+                operator: 'CONTAINS',
+                value: senderAddress,
+                action: 'DELETE',
+                confidence: 100,
+                timesApplied: 0,
+              });
+              message.success(`Regra criada para ${senderAddress}`);
+            } catch {
+              message.error('Erro ao criar regra');
+            }
+            await deleteEmail(id);
+            message.success('Email apagado');
+            fetchEmails();
+            fetchFolders();
+          },
+          onCancel: async () => {
+            await deleteEmail(id);
+            message.success('Email apagado');
+            fetchEmails();
+            fetchFolders();
+          },
+        });
+      } else {
+        await deleteEmail(id);
+        message.success('Email apagado');
+        fetchEmails();
+        fetchFolders();
+      }
     } catch {
       message.error('Erro ao apagar email');
     }
   };
+
+  // Feature 3: Rule preview
+  const handlePreviewRules = async () => {
+    setRulePreviewLoading(true);
+    try {
+      const data = await previewRuleApplication();
+      setRulePreviewData(data);
+      setRulePreviewOpen(true);
+    } catch {
+      message.error('Erro ao pré-visualizar regras');
+    } finally {
+      setRulePreviewLoading(false);
+    }
+  };
+
+  const handleApplyAllRules = async () => {
+    setRulePreviewLoading(true);
+    try {
+      const result = await applyRules();
+      message.success(`${result.applied} email${result.applied !== 1 ? 's' : ''} categorizado${result.applied !== 1 ? 's' : ''}`);
+      setRulePreviewOpen(false);
+      setRulePreviewData(null);
+      fetchEmails();
+      fetchSuggestions();
+    } catch {
+      message.error('Erro ao aplicar regras');
+    } finally {
+      setRulePreviewLoading(false);
+    }
+  };
+
+  // Feature 2: Auto-sync every 30 minutes
+  useEffect(() => {
+    const autoSync = async () => {
+      try {
+        await syncEmails();
+        message.info('Sincronização automática concluída');
+        fetchEmails();
+        fetchAccounts();
+        fetchFolders();
+        fetchSuggestions();
+
+        // After sync, check for rule matches
+        const preview = await previewRuleApplication();
+        if (preview.totalMatched > 0) {
+          setRulePreviewData(preview);
+          setRulePreviewOpen(true);
+        }
+      } catch {
+        // Silent fail for auto-sync
+      }
+    };
+
+    syncIntervalRef.current = setInterval(autoSync, 30 * 60 * 1000);
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [fetchEmails, fetchAccounts, fetchFolders, fetchSuggestions]);
 
   const handleApplySuggestions = (
     appliedSuggestions: { emailId: string; category: EmailCategory }[],
@@ -216,6 +335,13 @@ function App() {
               </Button>
             )}
             <Button
+              icon={<FilterOutlined />}
+              onClick={handlePreviewRules}
+              loading={rulePreviewLoading}
+            >
+              Aplicar Regras
+            </Button>
+            <Button
               icon={<SettingOutlined />}
               onClick={() => setRulesOpen(true)}
             >
@@ -274,6 +400,16 @@ function App() {
         onComplete={() => {
           handleActionComplete();
           fetchFolders();
+        }}
+      />
+      <RulePreviewModal
+        open={rulePreviewOpen}
+        data={rulePreviewData}
+        loading={rulePreviewLoading}
+        onApply={handleApplyAllRules}
+        onCancel={() => {
+          setRulePreviewOpen(false);
+          setRulePreviewData(null);
         }}
       />
     </Layout>

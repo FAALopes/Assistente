@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { RuleField, RuleOperator, RuleAction } from '@prisma/client';
+import { RuleField, RuleOperator, RuleAction, EmailCategory } from '@prisma/client';
 import { prisma } from '../index';
 import { applySuggestions } from '../services/ruleEngine';
 
@@ -107,6 +107,161 @@ router.delete('/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting rule:', error);
     res.status(500).json({ error: 'Failed to delete rule' });
+  }
+});
+
+// POST /api/rules/check-sender - Check if sender has an existing rule
+router.post('/check-sender', async (req: Request, res: Response) => {
+  try {
+    const { senderAddress } = req.body;
+
+    if (!senderAddress || typeof senderAddress !== 'string') {
+      res.status(400).json({ error: 'senderAddress is required' });
+      return;
+    }
+
+    const email = senderAddress.toLowerCase().trim();
+
+    // Find rules where field=FROM and value matches the sender address
+    const fromRules = await prisma.rule.findMany({
+      where: { field: 'FROM' },
+    });
+
+    // Check if any FROM rule matches: email contains rule value OR rule value contains email
+    const matchingRules = fromRules.filter((rule) => {
+      const ruleVal = rule.value.toLowerCase();
+      return email.includes(ruleVal) || ruleVal.includes(email);
+    });
+
+    res.json({ hasRule: matchingRules.length > 0, rules: matchingRules });
+  } catch (error) {
+    console.error('Error checking sender rule:', error);
+    res.status(500).json({ error: 'Failed to check sender rule' });
+  }
+});
+
+// POST /api/rules/preview-apply - Preview rule application without applying
+router.post('/preview-apply', async (_req: Request, res: Response) => {
+  try {
+    const rules = await prisma.rule.findMany({
+      orderBy: { confidence: 'desc' },
+    });
+
+    if (rules.length === 0) {
+      res.json({ matches: [], totalMatched: 0 });
+      return;
+    }
+
+    const emails = await prisma.email.findMany({
+      where: { category: 'UNCATEGORIZED' },
+      orderBy: { receivedAt: 'desc' },
+      take: 500,
+    });
+
+    const suggestions = applySuggestions(emails, rules);
+
+    // Group by rule
+    const ruleMap = new Map<string, { rule: typeof rules[0]; emails: Array<{ id: string; from: string; subject: string; receivedAt: string }>; action: string }>();
+
+    for (const suggestion of suggestions) {
+      const rule = rules.find((r) => r.id === suggestion.matchedRuleId);
+      if (!rule) continue;
+
+      const email = emails.find((e) => e.id === suggestion.emailId);
+      if (!email) continue;
+
+      if (!ruleMap.has(rule.id)) {
+        ruleMap.set(rule.id, {
+          rule,
+          emails: [],
+          action: rule.action,
+        });
+      }
+
+      ruleMap.get(rule.id)!.emails.push({
+        id: email.id,
+        from: email.from,
+        subject: email.subject || '(sem assunto)',
+        receivedAt: email.receivedAt.toISOString(),
+      });
+    }
+
+    const matches = Array.from(ruleMap.values()).map((m) => ({
+      ...m,
+      count: m.emails.length,
+    }));
+
+    res.json({
+      matches,
+      totalMatched: suggestions.length,
+    });
+  } catch (error) {
+    console.error('Error previewing rule application:', error);
+    res.status(500).json({ error: 'Failed to preview rule application' });
+  }
+});
+
+// POST /api/rules/apply - Apply rules to uncategorized emails
+router.post('/apply', async (_req: Request, res: Response) => {
+  try {
+    const rules = await prisma.rule.findMany({
+      orderBy: { confidence: 'desc' },
+    });
+
+    if (rules.length === 0) {
+      res.json({ applied: 0 });
+      return;
+    }
+
+    const emails = await prisma.email.findMany({
+      where: { category: 'UNCATEGORIZED' },
+      orderBy: { receivedAt: 'desc' },
+      take: 500,
+    });
+
+    const suggestions = applySuggestions(emails, rules);
+
+    // Map RuleAction to EmailCategory
+    const actionToCategory: Record<string, EmailCategory> = {
+      DELETE: 'DELETE',
+      TODO: 'TODO',
+      SAVE_LATER: 'SAVE_LATER',
+      SAVE_ONEDRIVE: 'SAVE_ONEDRIVE',
+    };
+
+    let applied = 0;
+
+    // Track rule application counts
+    const ruleCounts = new Map<string, number>();
+
+    for (const suggestion of suggestions) {
+      const category = actionToCategory[suggestion.suggestedCategory] || suggestion.suggestedCategory as EmailCategory;
+
+      await prisma.email.update({
+        where: { id: suggestion.emailId },
+        data: {
+          category,
+          categorySetAt: new Date(),
+        },
+      });
+
+      const count = ruleCounts.get(suggestion.matchedRuleId) || 0;
+      ruleCounts.set(suggestion.matchedRuleId, count + 1);
+      applied++;
+    }
+
+    // Increment timesApplied for each rule
+    for (const [ruleId, count] of ruleCounts) {
+      await prisma.rule.update({
+        where: { id: ruleId },
+        data: { timesApplied: { increment: count } },
+      });
+    }
+
+    res.json({ applied });
+  } catch (error) {
+    console.error('Error applying rules:', error);
+    res.status(500).json({ error: 'Failed to apply rules' });
   }
 });
 
