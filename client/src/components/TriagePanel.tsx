@@ -13,7 +13,6 @@ import {
   Spin,
   Badge,
   Alert,
-  Progress,
   Segmented,
 } from 'antd';
 import {
@@ -52,7 +51,7 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
   const [executing, setExecuting] = useState(false);
   const [activeTab, setActiveTab] = useState<TriageAction>('DELETE');
   const [done, setDone] = useState(false);
-  const [sortBy, setSortBy] = useState<'date' | 'sender' | 'confidence'>('date');
+  const [sortBy, setSortBy] = useState<'date' | 'sender' | 'confidence'>('sender');
 
   const emailMap = new Map(emails.map(e => [e.id, e]));
 
@@ -222,61 +221,56 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
         <List
           dataSource={tabItems}
           locale={{ emptyText: 'Nenhum email nesta categoria' }}
-          renderItem={(item) => (
-            <List.Item
-              style={{
-                padding: '10px 0',
-                borderBottom: '1px solid #f5f5f5',
-                opacity: item.checked ? 1 : 0.5,
-              }}
-            >
-              <div style={{ display: 'flex', width: '100%', alignItems: 'flex-start', gap: 10 }}>
-                <Checkbox
-                  checked={item.checked}
-                  onChange={() => toggleCheck(item.emailId)}
-                  style={{ marginTop: 4 }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <Text strong ellipsis style={{ maxWidth: 280 }}>
-                      {item.email.from}
-                    </Text>
-                    <Space size={4}>
-                      <Progress
-                        type="circle"
-                        percent={item.confidence}
-                        size={24}
-                        strokeColor={confidenceColor(item.confidence)}
-                        format={(p) => `${p}`}
-                      />
-                      <Select
-                        size="small"
-                        value={item.currentAction}
-                        onChange={(val) => changeAction(item.emailId, val)}
-                        style={{ width: 160 }}
-                        options={[
-                          { value: 'DELETE', label: 'Apagar' },
-                          { value: 'MOVE_TO_INBOX', label: 'Mover para Inbox' },
-                          { value: 'REVIEW', label: 'Rever' },
-                        ]}
-                      />
-                    </Space>
-                  </div>
-                  <Text ellipsis style={{ fontSize: 13, display: 'block', marginBottom: 2 }}>
-                    {item.email.subject || '(sem assunto)'}
+          size="small"
+          renderItem={(item) => {
+            const match = item.email.from?.match(/^(.+?)\s*<(.+)>$/);
+            const senderName = match ? match[1] : item.email.from;
+            const senderEmail = match ? match[2] : '';
+            return (
+              <List.Item
+                style={{
+                  padding: '4px 0',
+                  borderBottom: '1px solid #f5f5f5',
+                  opacity: item.checked ? 1 : 0.5,
+                }}
+              >
+                <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <Checkbox
+                    checked={item.checked}
+                    onChange={() => toggleCheck(item.emailId)}
+                  />
+                  <Text strong style={{ fontSize: 12, minWidth: 100, maxWidth: 140, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {senderName}
                   </Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
+                  {senderEmail && (
+                    <Text type="secondary" style={{ fontSize: 11, minWidth: 80, maxWidth: 150, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {senderEmail}
+                    </Text>
+                  )}
+                  <Text type="secondary" style={{ fontSize: 11, color: '#8c8c8c', minWidth: 60, maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: 'italic' }}>
                     {item.reason}
                   </Text>
+                  <Text ellipsis style={{ fontSize: 12, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.email.subject || '(sem assunto)'}
+                  </Text>
+                  <Select
+                    size="small"
+                    value={item.currentAction}
+                    onChange={(val) => changeAction(item.emailId, val)}
+                    style={{ width: 140, flexShrink: 0 }}
+                    options={[
+                      { value: 'DELETE', label: 'Apagar' },
+                      { value: 'MOVE_TO_INBOX', label: 'Inbox' },
+                      { value: 'REVIEW', label: 'Rever' },
+                    ]}
+                  />
                   {item.currentAction !== item.aiAction && (
-                    <Tag color="purple" style={{ fontSize: 10, marginLeft: 8 }}>
-                      Alterado por si
-                    </Tag>
+                    <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>Alt.</Tag>
                   )}
                 </div>
-              </div>
-            </List.Item>
-          )}
+              </List.Item>
+            );
+          }}
         />
       </div>
     );
@@ -328,7 +322,7 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
       }
       open={open}
       onClose={onClose}
-      width={600}
+      width={800}
       footer={
         !done ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
