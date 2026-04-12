@@ -99,6 +99,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
     }
 
     let totalSynced = 0;
+    let totalRemoved = 0;
     const errors: string[] = [];
 
     console.log(`Starting sync for ${accounts.length} account(s)...`);
@@ -113,6 +114,9 @@ router.post('/sync', async (_req: Request, res: Response) => {
             console.log(`  Fetching folder: ${folder.label} (${folder.graphName})`);
             const graphEmails = await fetchEmails(accessToken, folder.graphName);
             console.log(`  Got ${graphEmails.length} emails from ${folder.label}`);
+
+            // Collect all external IDs from the server for this folder
+            const serverExternalIds = new Set(graphEmails.map(e => e.id));
 
             for (const graphEmail of graphEmails) {
               const fromName = graphEmail.from?.emailAddress?.name || '';
@@ -149,6 +153,20 @@ router.post('/sync', async (_req: Request, res: Response) => {
 
               totalSynced++;
             }
+
+            // Remove emails from DB that no longer exist on the server for this account+folder
+            const localEmails = await prisma.email.findMany({
+              where: { accountId: account.id, folder: folder.graphName },
+              select: { id: true, externalId: true },
+            });
+
+            const toRemove = localEmails.filter(e => !serverExternalIds.has(e.externalId));
+            if (toRemove.length > 0) {
+              const removeIds = toRemove.map(e => e.id);
+              await prisma.email.deleteMany({ where: { id: { in: removeIds } } });
+              totalRemoved += toRemove.length;
+              console.log(`  Removed ${toRemove.length} emails no longer on server from ${folder.label}`);
+            }
           } catch (folderErr: any) {
             const msg = `Failed to sync folder ${folder.label} for ${account.email}: ${folderErr.message}`;
             console.error(msg);
@@ -165,6 +183,7 @@ router.post('/sync', async (_req: Request, res: Response) => {
     res.json({
       message: `Sync complete`,
       synced: totalSynced,
+      removed: totalRemoved,
       accounts: accounts.length,
       ...(errors.length > 0 && { errors }),
     });
