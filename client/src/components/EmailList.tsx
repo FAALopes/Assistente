@@ -362,6 +362,15 @@ function EmailList({
         columns={columns}
         rowKey="id"
         size="middle"
+        expandable={{
+          expandedRowRender: (record) => (
+            <div style={{ padding: '4px 0', color: '#595959', fontSize: 13, lineHeight: 1.6, maxWidth: 900 }}>
+              {record.bodyPreview || 'Sem preview disponível'}
+            </div>
+          ),
+          expandRowByClick: true,
+          expandedRowClassName: () => 'email-preview-row',
+        }}
         rowSelection={{
           selectedRowKeys: selectedIds,
           onChange: (keys) => onSelectionChange(keys as string[]),
