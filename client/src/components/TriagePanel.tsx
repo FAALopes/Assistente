@@ -242,6 +242,16 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
       ),
     },
     {
+      title: '%',
+      key: 'confidence',
+      width: 50,
+      align: 'center' as const,
+      render: (_: unknown, item: TriageItem) => {
+        const color = item.confidence >= 85 ? '#52c41a' : item.confidence >= 60 ? '#faad14' : '#ff4d4f';
+        return <Text style={{ fontSize: 12, color, fontWeight: 600 }}>{item.confidence}</Text>;
+      },
+    },
+    {
       title: 'Ação',
       key: 'action',
       width: 130,
