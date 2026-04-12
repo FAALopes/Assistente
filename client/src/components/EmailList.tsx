@@ -4,6 +4,7 @@ import {
   WindowsOutlined,
   GoogleOutlined,
   DeleteOutlined,
+  InboxOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { EmailCategory } from '../types';
@@ -27,6 +28,7 @@ interface EmailListProps {
   onFilterChange: (filters: Partial<EmailFilters>) => void;
   onPageChange: (page: number, limit: number) => void;
   onDelete?: (id: string) => void;
+  onMoveToInbox?: (id: string) => void;
 }
 
 const categoryLabels: Record<EmailCategory, string> = {
@@ -73,6 +75,7 @@ function EmailList({
   onFilterChange,
   onPageChange,
   onDelete,
+  onMoveToInbox,
 }: EmailListProps) {
   const suggestionMap = new Map(
     suggestions.map((s) => [s.emailId, s]),
@@ -115,26 +118,45 @@ function EmailList({
     {
       title: '',
       key: 'actions',
-      width: 36,
+      width: 64,
       render: (_: unknown, record: Email) => (
-        <Popconfirm
-          title="Apagar este email?"
-          description="O email será movido para o lixo no servidor."
-          onConfirm={() => onDelete?.(record.id)}
-          okText="Apagar"
-          cancelText="Cancelar"
-          okButtonProps={{ danger: true }}
-        >
-          <Button
-            type="text"
-            size="small"
-            icon={<DeleteOutlined />}
-            danger
-            style={{ opacity: 0.4 }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
-          />
-        </Popconfirm>
+        <Space size={0}>
+          <Popconfirm
+            title="Apagar este email?"
+            description="O email será movido para o lixo no servidor."
+            onConfirm={() => onDelete?.(record.id)}
+            okText="Apagar"
+            cancelText="Cancelar"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<DeleteOutlined />}
+              danger
+              style={{ opacity: 0.4 }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+            />
+          </Popconfirm>
+          {record.folder !== 'inbox' && (
+            <Popconfirm
+              title="Mover para Inbox?"
+              onConfirm={() => onMoveToInbox?.(record.id)}
+              okText="Mover"
+              cancelText="Cancelar"
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<InboxOutlined />}
+                style={{ opacity: 0.4, color: '#1677ff' }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+              />
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
     {

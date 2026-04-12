@@ -401,6 +401,44 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/emails/:id/move-to-inbox - Move email to inbox
+router.post('/:id/move-to-inbox', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const email = await prisma.email.findUnique({
+      where: { id },
+      include: { account: true },
+    });
+
+    if (!email) {
+      res.status(404).json({ error: 'Email not found' });
+      return;
+    }
+
+    // Move to inbox in Microsoft Graph
+    try {
+      const accessToken = await getValidToken(email.accountId);
+      await moveEmailToInbox(accessToken, email.externalId);
+    } catch (graphError: any) {
+      console.error('Graph move error:', graphError.message);
+      res.status(500).json({ error: 'Failed to move email in server' });
+      return;
+    }
+
+    // Update folder in local DB
+    await prisma.email.update({
+      where: { id },
+      data: { folder: 'inbox', triageAction: null, triageReason: null, triageConfidence: null, triageClassifiedAt: null },
+    });
+
+    res.json({ message: 'Email moved to inbox' });
+  } catch (error) {
+    console.error('Error moving email:', error);
+    res.status(500).json({ error: 'Failed to move email' });
+  }
+});
+
 // POST /api/emails/triage - Classify junk emails with AI (with cache)
 router.post('/triage', async (req: Request, res: Response) => {
   try {

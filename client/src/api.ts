@@ -72,6 +72,10 @@ export async function deleteEmail(id: string): Promise<void> {
   await api.delete(`/api/emails/${id}`);
 }
 
+export async function moveEmailToInbox(id: string): Promise<void> {
+  await api.post(`/api/emails/${id}/move-to-inbox`);
+}
+
 export async function bulkDeleteEmails(
   ids: string[],
 ): Promise<{ deleted: number }> {

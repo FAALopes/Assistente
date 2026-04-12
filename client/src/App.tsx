@@ -13,7 +13,7 @@ import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
 import TriagePanel from './components/TriagePanel';
 import RulePreviewModal from './components/RulePreviewModal';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, checkSenderRule, createRule, previewRuleApplication, applyRules } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules } from './api';
 import type {
   EmailAccount,
   Email,
@@ -189,6 +189,17 @@ function App() {
       }
     } catch {
       message.error('Erro ao apagar email');
+    }
+  };
+
+  const handleMoveToInbox = async (id: string) => {
+    try {
+      await moveEmailToInbox(id);
+      message.success('Email movido para Inbox');
+      fetchEmails();
+      fetchFolders();
+    } catch {
+      message.error('Erro ao mover email');
     }
   };
 
@@ -387,6 +398,7 @@ function App() {
                 setFilters((prev) => ({ ...prev, page, limit }))
               }
               onDelete={handleDeleteEmail}
+              onMoveToInbox={handleMoveToInbox}
             />
           </Spin>
         </Content>
