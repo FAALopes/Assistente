@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Drawer,
   Tabs,
-  List,
+  Table,
   Checkbox,
   Tag,
   Button,
@@ -194,6 +194,78 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
 
 
 
+  const triageColumns = [
+    {
+      title: '',
+      dataIndex: 'checked',
+      key: 'checked',
+      width: 40,
+      render: (_: unknown, item: TriageItem) => (
+        <Checkbox checked={item.checked} onChange={() => toggleCheck(item.emailId)} />
+      ),
+    },
+    {
+      title: 'Nome',
+      key: 'name',
+      width: 160,
+      ellipsis: true,
+      render: (_: unknown, item: TriageItem) => {
+        const match = item.email.from?.match(/^(.+?)\s*<(.+)>$/);
+        return <Text strong style={{ fontSize: 12 }}>{match ? match[1] : item.email.from}</Text>;
+      },
+    },
+    {
+      title: 'Email',
+      key: 'email',
+      width: 200,
+      ellipsis: true,
+      render: (_: unknown, item: TriageItem) => {
+        const match = item.email.from?.match(/^(.+?)\s*<(.+)>$/);
+        return <Text type="secondary" style={{ fontSize: 11 }}>{match ? match[2] : ''}</Text>;
+      },
+    },
+    {
+      title: 'Razão',
+      key: 'reason',
+      width: 250,
+      ellipsis: true,
+      render: (_: unknown, item: TriageItem) => (
+        <Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic' }}>{item.reason}</Text>
+      ),
+    },
+    {
+      title: 'Assunto',
+      key: 'subject',
+      ellipsis: true,
+      render: (_: unknown, item: TriageItem) => (
+        <Text style={{ fontSize: 12 }}>{item.email.subject || '(sem assunto)'}</Text>
+      ),
+    },
+    {
+      title: 'Ação',
+      key: 'action',
+      width: 130,
+      render: (_: unknown, item: TriageItem) => (
+        <Space size={4}>
+          <Select
+            size="small"
+            value={item.currentAction}
+            onChange={(val) => changeAction(item.emailId, val)}
+            style={{ width: 110 }}
+            options={[
+              { value: 'DELETE', label: 'Apagar' },
+              { value: 'MOVE_TO_INBOX', label: 'Inbox' },
+              { value: 'REVIEW', label: 'Rever' },
+            ]}
+          />
+          {item.currentAction !== item.aiAction && (
+            <Tag color="purple" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>Alt.</Tag>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
   const renderList = (action: TriageAction) => {
     const tabItems = getItemsByAction(action);
     const allChecked = tabItems.length > 0 && tabItems.every(i => i.checked);
@@ -202,7 +274,7 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
     return (
       <div>
         {tabItems.length > 0 && (
-          <div style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0', marginBottom: 8 }}>
+          <div style={{ padding: '4px 0', marginBottom: 4 }}>
             <Checkbox
               checked={allChecked}
               indeterminate={someChecked && !allChecked}
@@ -214,60 +286,18 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
             </Checkbox>
           </div>
         )}
-        <List
+        <Table
           dataSource={tabItems}
-          locale={{ emptyText: 'Nenhum email nesta categoria' }}
+          columns={triageColumns}
+          rowKey="emailId"
           size="small"
-          renderItem={(item) => {
-            const match = item.email.from?.match(/^(.+?)\s*<(.+)>$/);
-            const senderName = match ? match[1] : item.email.from;
-            const senderEmail = match ? match[2] : '';
-            return (
-              <List.Item
-                style={{
-                  padding: '4px 0',
-                  borderBottom: '1px solid #f5f5f5',
-                  opacity: item.checked ? 1 : 0.5,
-                }}
-              >
-                <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                  <Checkbox
-                    checked={item.checked}
-                    onChange={() => toggleCheck(item.emailId)}
-                  />
-                  <Text strong style={{ fontSize: 12, minWidth: 100, maxWidth: 140, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {senderName}
-                  </Text>
-                  {senderEmail && (
-                    <Text type="secondary" style={{ fontSize: 11, minWidth: 80, maxWidth: 150, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {senderEmail}
-                    </Text>
-                  )}
-                  <Text type="secondary" style={{ fontSize: 11, color: '#8c8c8c', minWidth: 60, maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontStyle: 'italic' }}>
-                    {item.reason}
-                  </Text>
-                  <Text ellipsis style={{ fontSize: 12, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.email.subject || '(sem assunto)'}
-                  </Text>
-                  <Select
-                    size="small"
-                    value={item.currentAction}
-                    onChange={(val) => changeAction(item.emailId, val)}
-                    style={{ width: 140, flexShrink: 0 }}
-                    options={[
-                      { value: 'DELETE', label: 'Apagar' },
-                      { value: 'MOVE_TO_INBOX', label: 'Inbox' },
-                      { value: 'REVIEW', label: 'Rever' },
-                    ]}
-                  />
-                  {item.currentAction !== item.aiAction && (
-                    <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>Alt.</Tag>
-                  )}
-                </div>
-              </List.Item>
-            );
-          }}
+          pagination={false}
+          showHeader={tabItems.length > 0}
+          locale={{ emptyText: 'Nenhum email nesta categoria' }}
+          rowClassName={(item) => item.checked ? '' : 'triage-row-unchecked'}
+          style={{ fontSize: 12 }}
         />
+        <style>{`.triage-row-unchecked { opacity: 0.5; }`}</style>
       </div>
     );
   };
@@ -318,7 +348,7 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
       }
       open={open}
       onClose={onClose}
-      width={800}
+      width="90vw"
       footer={
         !done ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
