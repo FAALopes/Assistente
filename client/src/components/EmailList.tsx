@@ -29,6 +29,8 @@ interface EmailListProps {
   onPageChange: (page: number, limit: number) => void;
   onDelete?: (id: string) => void;
   onMoveToInbox?: (id: string) => void;
+  onSelectEmail?: (email: Email | null) => void;
+  selectedEmailId?: string | null;
 }
 
 const categoryLabels: Record<EmailCategory, string> = {
@@ -76,6 +78,8 @@ function EmailList({
   onPageChange,
   onDelete,
   onMoveToInbox,
+  onSelectEmail,
+  selectedEmailId,
 }: EmailListProps) {
   const suggestionMap = new Map(
     suggestions.map((s) => [s.emailId, s]),
@@ -362,21 +366,22 @@ function EmailList({
         columns={columns}
         rowKey="id"
         size="middle"
-        expandable={{
-          expandedRowRender: (record) => (
-            <div style={{ padding: '4px 0', color: '#595959', fontSize: 13, lineHeight: 1.6, maxWidth: 900 }}>
-              {record.bodyPreview || 'Sem preview disponível'}
-            </div>
-          ),
-          expandRowByClick: true,
-          expandedRowClassName: () => 'email-preview-row',
-        }}
         rowSelection={{
           selectedRowKeys: selectedIds,
           onChange: (keys) => onSelectionChange(keys as string[]),
         }}
         onRow={(record) => ({
-          style: getRowStyle(record),
+          style: {
+            ...getRowStyle(record),
+            cursor: 'pointer',
+            ...(selectedEmailId === record.id ? { background: '#e6f4ff' } : {}),
+          },
+          onClick: (e) => {
+            // Don't trigger on checkbox, button or select clicks
+            const target = e.target as HTMLElement;
+            if (target.closest('.ant-checkbox-wrapper') || target.closest('.ant-btn') || target.closest('.ant-select')) return;
+            onSelectEmail?.(selectedEmailId === record.id ? null : record);
+          },
         })}
         onChange={(_pagination, _filters, sorter) => {
           if (!Array.isArray(sorter) && sorter.columnKey) {

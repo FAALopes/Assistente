@@ -47,6 +47,7 @@ function App() {
     limit: 50,
   });
   const isJunkFolder = filters.folder === 'junkemail';
+  const [previewEmail, setPreviewEmail] = useState<Email | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
   // Flatten folders for EmailList (unique by id)
@@ -383,24 +384,59 @@ function App() {
             />
           )}
 
-          <Spin spinning={loading}>
-            <EmailList
-              emails={emails}
-              accounts={accounts}
-              folders={allFolders}
-              suggestions={suggestions}
-              total={total}
-              filters={filters}
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
-              onFilterChange={handleFilterChange}
-              onPageChange={(page, limit) =>
-                setFilters((prev) => ({ ...prev, page, limit }))
-              }
-              onDelete={handleDeleteEmail}
-              onMoveToInbox={handleMoveToInbox}
-            />
-          </Spin>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Spin spinning={loading}>
+                <EmailList
+                  emails={emails}
+                  accounts={accounts}
+                  folders={allFolders}
+                  suggestions={suggestions}
+                  total={total}
+                  filters={filters}
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                  onFilterChange={handleFilterChange}
+                  onPageChange={(page, limit) =>
+                    setFilters((prev) => ({ ...prev, page, limit }))
+                  }
+                  onDelete={handleDeleteEmail}
+                  onMoveToInbox={handleMoveToInbox}
+                  onSelectEmail={setPreviewEmail}
+                  selectedEmailId={previewEmail?.id || null}
+                />
+              </Spin>
+            </div>
+            {previewEmail && (
+              <div style={{
+                width: 380,
+                flexShrink: 0,
+                background: '#fff',
+                borderRadius: 8,
+                padding: 16,
+                border: '1px solid #f0f0f0',
+                overflow: 'auto',
+                maxHeight: 'calc(100vh - 140px)',
+                position: 'sticky',
+                top: 80,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <Title level={5} style={{ margin: 0, flex: 1 }}>
+                    {previewEmail.subject || '(sem assunto)'}
+                  </Title>
+                  <Button type="text" size="small" onClick={() => setPreviewEmail(null)} style={{ marginLeft: 8 }}>✕</Button>
+                </div>
+                <div style={{ marginBottom: 12, fontSize: 13, color: '#595959' }}>
+                  <div><strong>De:</strong> {previewEmail.from}</div>
+                  {previewEmail.to && <div><strong>Para:</strong> {previewEmail.to}</div>}
+                  <div><strong>Data:</strong> {new Date(previewEmail.receivedAt).toLocaleString('pt-PT')}</div>
+                </div>
+                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, fontSize: 13, lineHeight: 1.7, color: '#333', whiteSpace: 'pre-wrap' }}>
+                  {previewEmail.bodyPreview || 'Sem preview disponível'}
+                </div>
+              </div>
+            )}
+          </div>
         </Content>
       </Layout>
 
