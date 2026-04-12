@@ -192,11 +192,7 @@ function TriagePanel({ open, onClose, emails, onComplete }: TriagePanelProps) {
   const moveCount = getItemsByAction('MOVE_TO_INBOX').length;
   const reviewCount = getItemsByAction('REVIEW').length;
 
-  const confidenceColor = (c: number) => {
-    if (c >= 85) return '#52c41a';
-    if (c >= 60) return '#faad14';
-    return '#ff4d4f';
-  };
+
 
   const renderList = (action: TriageAction) => {
     const tabItems = getItemsByAction(action);
