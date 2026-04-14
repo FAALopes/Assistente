@@ -120,3 +120,19 @@ model Rule {
 
   @@map("rules")
 }
+
+model RuleApplication {
+  id               String        @id @default(uuid())
+  emailId          String
+  ruleId           String
+  previousCategory EmailCategory
+  newCategory      EmailCategory
+  appliedAt        DateTime      @default(now())
+  reverted         Boolean       @default(false)
+  revertedAt       DateTime?
+  acknowledgedAt   DateTime?
+
+  @@index([acknowledgedAt])
+  @@index([appliedAt])
+  @@map("rule_applications")
+}

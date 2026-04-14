@@ -12,6 +12,7 @@ import type {
   TriageResult,
   TriageExecuteResult,
   RulePreviewResult,
+  RecentApplicationsResult,
 } from './types';
 
 const api = axios.create({
@@ -149,5 +150,20 @@ export async function previewRuleApplication(): Promise<RulePreviewResult> {
 // Apply rules
 export async function applyRules(): Promise<{ applied: number }> {
   const { data } = await api.post<{ applied: number }>('/api/rules/apply');
+  return data;
+}
+
+// Recent rule applications (unacknowledged)
+export async function getRecentApplications(): Promise<RecentApplicationsResult> {
+  const { data } = await api.get<RecentApplicationsResult>('/api/rules/applications/recent');
+  return data;
+}
+
+export async function revertApplication(id: string): Promise<void> {
+  await api.post(`/api/rules/applications/${id}/revert`);
+}
+
+export async function acknowledgeApplications(): Promise<{ acknowledged: number }> {
+  const { data } = await api.post<{ acknowledged: number }>('/api/rules/applications/acknowledge');
   return data;
 }

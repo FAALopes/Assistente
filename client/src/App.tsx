@@ -13,7 +13,8 @@ import SuggestionBanner from './components/SuggestionBanner';
 import RulesPanel from './components/RulesPanel';
 import TriagePanel from './components/TriagePanel';
 import RulePreviewModal from './components/RulePreviewModal';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules } from './api';
+import RecentApplicationsBanner from './components/RecentApplicationsBanner';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications } from './api';
 import type {
   EmailAccount,
   Email,
@@ -22,6 +23,7 @@ import type {
   EmailCategory,
   EmailFilters,
   RulePreviewResult,
+  RuleApplicationRecord,
 } from './types';
 
 const { Header, Sider, Content } = Layout;
@@ -41,6 +43,7 @@ function App() {
   const [rulePreviewOpen, setRulePreviewOpen] = useState(false);
   const [rulePreviewData, setRulePreviewData] = useState<RulePreviewResult | null>(null);
   const [rulePreviewLoading, setRulePreviewLoading] = useState(false);
+  const [recentApplications, setRecentApplications] = useState<RuleApplicationRecord[]>([]);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [filters, setFilters] = useState<EmailFilters>({
     page: 1,
@@ -94,11 +97,21 @@ function App() {
     }
   }, []);
 
+  const fetchRecentApplications = useCallback(async () => {
+    try {
+      const data = await getRecentApplications();
+      setRecentApplications(data.applications);
+    } catch {
+      // Silently fail
+    }
+  }, []);
+
   useEffect(() => {
     fetchAccounts();
     fetchFolders();
     fetchSuggestions();
-  }, [fetchAccounts, fetchFolders, fetchSuggestions]);
+    fetchRecentApplications();
+  }, [fetchAccounts, fetchFolders, fetchSuggestions, fetchRecentApplications]);
 
   useEffect(() => {
     fetchEmails();
@@ -227,6 +240,7 @@ function App() {
       setRulePreviewData(null);
       fetchEmails();
       fetchSuggestions();
+      fetchRecentApplications();
     } catch {
       message.error('Erro ao aplicar regras');
     } finally {
@@ -239,17 +253,17 @@ function App() {
     const autoSync = async () => {
       try {
         await syncEmails();
-        message.info('Sincronização automática concluída');
         fetchEmails();
         fetchAccounts();
         fetchFolders();
         fetchSuggestions();
 
-        // After sync, check for rule matches
-        const preview = await previewRuleApplication();
-        if (preview.totalMatched > 0) {
-          setRulePreviewData(preview);
-          setRulePreviewOpen(true);
+        // After sync, AUTOMATICALLY apply rules (no popup)
+        const result = await applyRules();
+        if (result.applied > 0) {
+          message.info(`Sincronização: ${result.applied} email${result.applied !== 1 ? 's' : ''} categorizado${result.applied !== 1 ? 's' : ''} automaticamente`);
+          fetchEmails();
+          fetchRecentApplications();
         }
       } catch {
         // Silent fail for auto-sync
@@ -263,7 +277,7 @@ function App() {
         clearInterval(syncIntervalRef.current);
       }
     };
-  }, [fetchEmails, fetchAccounts, fetchFolders, fetchSuggestions]);
+  }, [fetchEmails, fetchAccounts, fetchFolders, fetchSuggestions, fetchRecentApplications]);
 
   const handleApplySuggestions = (
     appliedSuggestions: { emailId: string; category: EmailCategory }[],
@@ -371,6 +385,13 @@ function App() {
         </Header>
 
         <Content style={{ padding: '16px 24px', background: '#f5f5f5' }}>
+          <RecentApplicationsBanner
+            applications={recentApplications}
+            onRefresh={() => {
+              fetchRecentApplications();
+              fetchEmails();
+            }}
+          />
           <SuggestionBanner
             suggestions={suggestions}
             emails={emails}

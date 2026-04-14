@@ -117,3 +117,19 @@ export interface RulePreviewResult {
   matches: RulePreviewMatch[];
   totalMatched: number;
 }
+
+export interface RuleApplicationRecord {
+  id: string;
+  emailId: string;
+  ruleId: string;
+  previousCategory: EmailCategory;
+  newCategory: EmailCategory;
+  appliedAt: string;
+  email: { id: string; from: string; subject: string | null; receivedAt: string } | null;
+  rule: Rule | null;
+}
+
+export interface RecentApplicationsResult {
+  applications: RuleApplicationRecord[];
+  total: number;
+}

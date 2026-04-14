@@ -237,11 +237,24 @@ router.post('/apply', async (_req: Request, res: Response) => {
     for (const suggestion of suggestions) {
       const category = actionToCategory[suggestion.suggestedCategory] || suggestion.suggestedCategory as EmailCategory;
 
+      const email = emails.find((e) => e.id === suggestion.emailId);
+      if (!email) continue;
+
       await prisma.email.update({
         where: { id: suggestion.emailId },
         data: {
           category,
           categorySetAt: new Date(),
+        },
+      });
+
+      // Log the rule application for potential revert
+      await prisma.ruleApplication.create({
+        data: {
+          emailId: suggestion.emailId,
+          ruleId: suggestion.matchedRuleId,
+          previousCategory: email.category,
+          newCategory: category,
         },
       });
 
@@ -262,6 +275,102 @@ router.post('/apply', async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('Error applying rules:', error);
     res.status(500).json({ error: 'Failed to apply rules' });
+  }
+});
+
+// GET /api/rules/applications/recent - List recent unacknowledged rule applications
+router.get('/applications/recent', async (_req: Request, res: Response) => {
+  try {
+    const applications = await prisma.ruleApplication.findMany({
+      where: {
+        acknowledgedAt: null,
+        reverted: false,
+      },
+      orderBy: { appliedAt: 'desc' },
+      take: 200,
+    });
+
+    // Enrich with email and rule info
+    const emailIds = applications.map((a) => a.emailId);
+    const ruleIds = [...new Set(applications.map((a) => a.ruleId))];
+
+    const [emails, rules] = await Promise.all([
+      prisma.email.findMany({
+        where: { id: { in: emailIds } },
+        select: { id: true, from: true, subject: true, receivedAt: true },
+      }),
+      prisma.rule.findMany({
+        where: { id: { in: ruleIds } },
+      }),
+    ]);
+
+    const emailMap = new Map(emails.map((e) => [e.id, e]));
+    const ruleMap = new Map(rules.map((r) => [r.id, r]));
+
+    const enriched = applications.map((app) => ({
+      id: app.id,
+      emailId: app.emailId,
+      ruleId: app.ruleId,
+      previousCategory: app.previousCategory,
+      newCategory: app.newCategory,
+      appliedAt: app.appliedAt.toISOString(),
+      email: emailMap.get(app.emailId) || null,
+      rule: ruleMap.get(app.ruleId) || null,
+    }));
+
+    res.json({ applications: enriched, total: applications.length });
+  } catch (error) {
+    console.error('Error fetching recent applications:', error);
+    res.status(500).json({ error: 'Failed to fetch recent applications' });
+  }
+});
+
+// POST /api/rules/applications/:id/revert - Revert a rule application
+router.post('/applications/:id/revert', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const application = await prisma.ruleApplication.findUnique({ where: { id } });
+    if (!application) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+    if (application.reverted) {
+      res.status(400).json({ error: 'Already reverted' });
+      return;
+    }
+
+    // Restore previous category
+    await prisma.email.update({
+      where: { id: application.emailId },
+      data: {
+        category: application.previousCategory,
+        categorySetAt: new Date(),
+      },
+    });
+
+    await prisma.ruleApplication.update({
+      where: { id },
+      data: { reverted: true, revertedAt: new Date() },
+    });
+
+    res.json({ message: 'Reverted successfully' });
+  } catch (error) {
+    console.error('Error reverting application:', error);
+    res.status(500).json({ error: 'Failed to revert application' });
+  }
+});
+
+// POST /api/rules/applications/acknowledge - Acknowledge all unacknowledged applications
+router.post('/applications/acknowledge', async (_req: Request, res: Response) => {
+  try {
+    const result = await prisma.ruleApplication.updateMany({
+      where: { acknowledgedAt: null },
+      data: { acknowledgedAt: new Date() },
+    });
+    res.json({ acknowledged: result.count });
+  } catch (error) {
+    console.error('Error acknowledging applications:', error);
+    res.status(500).json({ error: 'Failed to acknowledge applications' });
   }
 });
 
