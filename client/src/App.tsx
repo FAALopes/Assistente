@@ -121,7 +121,21 @@ function App() {
     setSyncing(true);
     try {
       const result = await syncEmails();
-      message.success(`${result.synced} emails sincronizados`);
+      const removedTxt = result.removed ? `, ${result.removed} removidos` : '';
+      message.success(`${result.synced} emails sincronizados${removedTxt}`);
+      if (result.errors && result.errors.length > 0) {
+        Modal.warning({
+          title: `${result.errors.length} erro(s) durante sync`,
+          content: (
+            <ul style={{ margin: 0, paddingLeft: 20, maxHeight: 300, overflow: 'auto' }}>
+              {result.errors.map((e, i) => (
+                <li key={i} style={{ fontSize: 12, marginBottom: 4 }}>{e}</li>
+              ))}
+            </ul>
+          ),
+          width: 600,
+        });
+      }
       fetchEmails();
       fetchAccounts();
       fetchFolders();
