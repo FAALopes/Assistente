@@ -51,6 +51,7 @@ model EmailAccount {
   id           String    @id @default(uuid())
   email        String
   displayName  String?
+  color        String?
   provider     Provider
   accessToken  String
   refreshToken String?

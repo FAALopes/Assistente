@@ -28,6 +28,14 @@ export async function getAccounts(): Promise<EmailAccount[]> {
   return data;
 }
 
+export async function updateAccount(
+  id: string,
+  updates: { displayName?: string | null; color?: string | null },
+): Promise<EmailAccount> {
+  const { data } = await api.patch<EmailAccount>(`/auth/accounts/${id}`, updates);
+  return data;
+}
+
 // Emails
 export async function getEmails(
   params?: EmailFilters,

@@ -342,6 +342,7 @@ function App() {
             onSelectFolder={(folder) =>
               handleFilterChange({ folder })
             }
+            onAccountUpdated={fetchAccounts}
           />
         )}
       </Sider>

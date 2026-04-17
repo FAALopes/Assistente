@@ -157,6 +157,7 @@ router.get('/accounts', async (_req: Request, res: Response) => {
         id: true,
         email: true,
         displayName: true,
+        color: true,
         provider: true,
         createdAt: true,
         _count: { select: { emails: true } },
@@ -168,6 +169,48 @@ router.get('/accounts', async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching accounts:', error);
     res.status(500).json({ error: 'Failed to fetch accounts' });
+  }
+});
+
+// PATCH /auth/accounts/:id - Update account displayName or color
+router.patch('/accounts/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { displayName, color } = req.body;
+
+    const account = await prisma.emailAccount.findUnique({ where: { id } });
+    if (!account) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+
+    const data: { displayName?: string | null; color?: string | null } = {};
+    if (displayName !== undefined) {
+      const trimmed = typeof displayName === 'string' ? displayName.trim() : '';
+      data.displayName = trimmed.length > 0 ? trimmed : null;
+    }
+    if (color !== undefined) {
+      data.color = color || null;
+    }
+
+    const updated = await prisma.emailAccount.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        color: true,
+        provider: true,
+        createdAt: true,
+        _count: { select: { emails: true } },
+      },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating account:', error);
+    res.status(500).json({ error: 'Failed to update account' });
   }
 });
 
