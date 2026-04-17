@@ -13,6 +13,8 @@ import type {
   TriageExecuteResult,
   RulePreviewResult,
   RecentApplicationsResult,
+  EmailAction,
+  EmailActionMatch,
 } from './types';
 
 const api = axios.create({
@@ -173,5 +175,27 @@ export async function revertApplication(id: string): Promise<void> {
 
 export async function acknowledgeApplications(): Promise<{ acknowledged: number }> {
   const { data } = await api.post<{ acknowledged: number }>('/api/rules/applications/acknowledge');
+  return data;
+}
+
+// Email Actions
+export async function getEmailActions(): Promise<EmailAction[]> {
+  const { data } = await api.get<EmailAction[]>('/api/email-actions');
+  return data;
+}
+
+export async function createEmailAction(
+  action: Omit<EmailAction, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<EmailAction> {
+  const { data } = await api.post<EmailAction>('/api/email-actions', action);
+  return data;
+}
+
+export async function deleteEmailAction(id: string): Promise<void> {
+  await api.delete(`/api/email-actions/${id}`);
+}
+
+export async function matchEmailAction(emailId: string): Promise<EmailActionMatch> {
+  const { data } = await api.get<EmailActionMatch>(`/api/email-actions/match/${emailId}`);
   return data;
 }

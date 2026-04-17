@@ -8,6 +8,7 @@ import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import emailRoutes from './routes/emails';
 import ruleRoutes from './routes/rules';
+import emailActionRoutes from './routes/emailActions';
 
 export const prisma = new PrismaClient();
 
@@ -44,6 +45,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/rules', ruleRoutes);
+app.use('/api/email-actions', emailActionRoutes);
 
 // Serve frontend static files in production
 const clientPath = path.join(__dirname, '..', 'dist', 'client');

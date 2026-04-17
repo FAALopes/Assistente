@@ -134,3 +134,20 @@ export interface RecentApplicationsResult {
   applications: RuleApplicationRecord[];
   total: number;
 }
+
+export interface EmailAction {
+  id: string;
+  name: string;
+  accountId: string | null;
+  senderPattern: string | null;
+  subjectPattern: string | null;
+  actionType: string;
+  actionValue: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailActionMatch {
+  action: EmailAction | null;
+  score: number;
+}

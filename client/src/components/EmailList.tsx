@@ -6,8 +6,12 @@ import {
   GoogleOutlined,
   DeleteOutlined,
   InboxOutlined,
-  LinkOutlined,
+  ThunderboltOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
+import { matchEmailAction } from '../api';
+import DefineActionModal from './DefineActionModal';
+import type { EmailAction } from '../types';
 import type { ColumnsType } from 'antd/es/table';
 import { EmailCategory } from '../types';
 import type {
@@ -90,33 +94,46 @@ function EmailList({
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
   const [ctxMenu, setCtxMenu] = useState<{ email: Email; x: number; y: number } | null>(null);
+  const [matchedAction, setMatchedAction] = useState<EmailAction | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [defineModalEmail, setDefineModalEmail] = useState<Email | null>(null);
 
   useEffect(() => {
-    if (!ctxMenu) return;
+    if (!ctxMenu) {
+      setMatchedAction(null);
+      return;
+    }
     const close = () => setCtxMenu(null);
     window.addEventListener('click', close);
     window.addEventListener('scroll', close, true);
+
+    // Fetch matching action
+    setMatchLoading(true);
+    matchEmailAction(ctxMenu.email.id)
+      .then((res) => setMatchedAction(res.action))
+      .catch(() => setMatchedAction(null))
+      .finally(() => setMatchLoading(false));
+
     return () => {
       window.removeEventListener('click', close);
       window.removeEventListener('scroll', close, true);
     };
   }, [ctxMenu]);
 
-  // Extract first URL from email content
-  const extractUrl = (email: Email): string | null => {
-    const text = `${email.subject || ''} ${email.bodyPreview || ''}`;
-    const match = text.match(/https?:\/\/[^\s<>"')]+/i);
-    return match ? match[0].replace(/[.,;:!?)]+$/, '') : null;
+  const handleRunAction = () => {
+    if (!matchedAction) return;
+    setCtxMenu(null);
+    if (matchedAction.actionType === 'OPEN_URL') {
+      window.open(matchedAction.actionValue, '_blank', 'noopener,noreferrer');
+    } else {
+      message.warning('Tipo de ação desconhecido');
+    }
   };
 
-  const handleOpenLink = (email: Email) => {
-    const url = extractUrl(email);
+  const handleDefineAction = () => {
+    if (!ctxMenu) return;
+    setDefineModalEmail(ctxMenu.email);
     setCtxMenu(null);
-    if (!url) {
-      message.warning('Nenhum link encontrado no email');
-      return;
-    }
-    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const folderRowColors: Record<string, string> = {
@@ -447,51 +464,81 @@ function EmailList({
         }}
       />
 
-      {ctxMenu && (() => {
-        const url = extractUrl(ctxMenu.email);
-        return (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
-            style={{
-              position: 'fixed',
-              top: ctxMenu.y,
-              left: ctxMenu.x,
-              background: '#fff',
-              borderRadius: 8,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              padding: 8,
-              zIndex: 2000,
-              minWidth: 240,
-              border: '1px solid #f0f0f0',
-            }}
-          >
+      {ctxMenu && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{
+            position: 'fixed',
+            top: ctxMenu.y,
+            left: ctxMenu.x,
+            background: '#fff',
+            borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            padding: 8,
+            zIndex: 2000,
+            minWidth: 260,
+            border: '1px solid #f0f0f0',
+          }}
+        >
+          {matchLoading ? (
+            <div style={{ padding: '8px 12px', fontSize: 12, color: '#8c8c8c' }}>A procurar ação...</div>
+          ) : matchedAction ? (
             <div
               style={{
                 padding: '8px 12px',
-                cursor: url ? 'pointer' : 'not-allowed',
+                cursor: 'pointer',
                 borderRadius: 4,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
                 fontSize: 13,
-                opacity: url ? 1 : 0.45,
               }}
-              onMouseEnter={(e) => { if (url) e.currentTarget.style.background = '#f5f5f5'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              onClick={() => url && handleOpenLink(ctxMenu.email)}
-              title={url || 'Nenhum link encontrado'}
+              onClick={handleRunAction}
+              title={matchedAction.actionValue}
             >
-              <LinkOutlined /> Executar link
-              {url && (
-                <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 'auto', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {url.replace(/^https?:\/\//, '')}
-                </span>
-              )}
+              <ThunderboltOutlined style={{ color: '#faad14' }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div>Executar ação</div>
+                <div style={{ fontSize: 11, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {matchedAction.name}
+                </div>
+              </div>
             </div>
+          ) : (
+            <div style={{ padding: '8px 12px', fontSize: 11, color: '#8c8c8c' }}>
+              Nenhuma ação definida para este email
+            </div>
+          )}
+          <div style={{ height: 1, background: '#f0f0f0', margin: '4px 0' }} />
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: 'pointer',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={handleDefineAction}
+          >
+            <PlusOutlined /> {matchedAction ? 'Definir outra ação...' : 'Definir ação...'}
           </div>
-        );
-      })()}
+        </div>
+      )}
+
+      <DefineActionModal
+        open={defineModalEmail !== null}
+        email={defineModalEmail}
+        accounts={accounts}
+        onClose={() => setDefineModalEmail(null)}
+        onCreated={() => { /* refresh not strictly needed */ }}
+      />
     </div>
   );
 }

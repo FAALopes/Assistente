@@ -122,6 +122,21 @@ model Rule {
   @@map("rules")
 }
 
+model EmailAction {
+  id              String   @id @default(uuid())
+  name            String
+  accountId       String?
+  senderPattern   String?
+  subjectPattern  String?
+  actionType      String   @default("OPEN_URL")
+  actionValue     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([accountId])
+  @@map("email_actions")
+}
+
 model RuleApplication {
   id               String        @id @default(uuid())
   emailId          String
