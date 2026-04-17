@@ -1,10 +1,12 @@
-import { Table, Tag, Input, Select, Space, Badge, Button, Popconfirm } from 'antd';
+import { useState, useEffect } from 'react';
+import { Table, Tag, Input, Select, Space, Badge, Button, Popconfirm, message } from 'antd';
 import {
   SearchOutlined,
   WindowsOutlined,
   GoogleOutlined,
   DeleteOutlined,
   InboxOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { EmailCategory } from '../types';
@@ -86,6 +88,36 @@ function EmailList({
   );
 
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
+
+  const [ctxMenu, setCtxMenu] = useState<{ email: Email; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [ctxMenu]);
+
+  // Extract first URL from email content
+  const extractUrl = (email: Email): string | null => {
+    const text = `${email.subject || ''} ${email.bodyPreview || ''}`;
+    const match = text.match(/https?:\/\/[^\s<>"')]+/i);
+    return match ? match[0].replace(/[.,;:!?)]+$/, '') : null;
+  };
+
+  const handleOpenLink = (email: Email) => {
+    const url = extractUrl(email);
+    setCtxMenu(null);
+    if (!url) {
+      message.warning('Nenhum link encontrado no email');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   const folderRowColors: Record<string, string> = {
     junkemail: '#fff1f0',
@@ -382,6 +414,10 @@ function EmailList({
             if (target.closest('.ant-checkbox-wrapper') || target.closest('.ant-btn') || target.closest('.ant-select')) return;
             onSelectEmail?.(selectedEmailId === record.id ? null : record);
           },
+          onContextMenu: (e) => {
+            e.preventDefault();
+            setCtxMenu({ email: record, x: e.clientX, y: e.clientY });
+          },
         })}
         onChange={(_pagination, _filters, sorter) => {
           if (!Array.isArray(sorter) && sorter.columnKey) {
@@ -410,6 +446,52 @@ function EmailList({
           selectionAll: 'Selecionar todos',
         }}
       />
+
+      {ctxMenu && (() => {
+        const url = extractUrl(ctxMenu.email);
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{
+              position: 'fixed',
+              top: ctxMenu.y,
+              left: ctxMenu.x,
+              background: '#fff',
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+              padding: 8,
+              zIndex: 2000,
+              minWidth: 240,
+              border: '1px solid #f0f0f0',
+            }}
+          >
+            <div
+              style={{
+                padding: '8px 12px',
+                cursor: url ? 'pointer' : 'not-allowed',
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                opacity: url ? 1 : 0.45,
+              }}
+              onMouseEnter={(e) => { if (url) e.currentTarget.style.background = '#f5f5f5'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              onClick={() => url && handleOpenLink(ctxMenu.email)}
+              title={url || 'Nenhum link encontrado'}
+            >
+              <LinkOutlined /> Executar link
+              {url && (
+                <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 'auto', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {url.replace(/^https?:\/\//, '')}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
