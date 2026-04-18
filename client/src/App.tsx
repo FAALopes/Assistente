@@ -5,6 +5,7 @@ import {
   SettingOutlined,
   ThunderboltOutlined,
   FilterOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
 import EmailList from './components/EmailList';
@@ -14,6 +15,7 @@ import RulesPanel from './components/RulesPanel';
 import TriagePanel from './components/TriagePanel';
 import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
+import EmailActionsPanel from './components/EmailActionsPanel';
 import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications } from './api';
 import type {
   EmailAccount,
@@ -39,6 +41,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
   const [rulePreviewOpen, setRulePreviewOpen] = useState(false);
   const [rulePreviewData, setRulePreviewData] = useState<RulePreviewResult | null>(null);
@@ -383,6 +386,12 @@ function App() {
               Aplicar Regras
             </Button>
             <Button
+              icon={<AppstoreOutlined />}
+              onClick={() => setActionsOpen(true)}
+            >
+              Ações
+            </Button>
+            <Button
               icon={<SettingOutlined />}
               onClick={() => setRulesOpen(true)}
             >
@@ -477,6 +486,11 @@ function App() {
       </Layout>
 
       <RulesPanel open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <EmailActionsPanel
+        open={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        accounts={accounts}
+      />
       <TriagePanel
         open={triageOpen}
         onClose={() => setTriageOpen(false)}

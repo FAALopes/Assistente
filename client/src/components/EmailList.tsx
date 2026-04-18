@@ -537,7 +537,7 @@ function EmailList({
         email={defineModalEmail}
         accounts={accounts}
         onClose={() => setDefineModalEmail(null)}
-        onCreated={() => { /* refresh not strictly needed */ }}
+        onSaved={() => { /* refresh not strictly needed */ }}
       />
     </div>
   );

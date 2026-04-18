@@ -195,6 +195,14 @@ export async function deleteEmailAction(id: string): Promise<void> {
   await api.delete(`/api/email-actions/${id}`);
 }
 
+export async function updateEmailAction(
+  id: string,
+  updates: Partial<Omit<EmailAction, 'id' | 'createdAt' | 'updatedAt'>>,
+): Promise<EmailAction> {
+  const { data } = await api.patch<EmailAction>(`/api/email-actions/${id}`, updates);
+  return data;
+}
+
 export async function matchEmailAction(emailId: string): Promise<EmailActionMatch> {
   const { data } = await api.get<EmailActionMatch>(`/api/email-actions/match/${emailId}`);
   return data;

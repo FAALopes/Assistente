@@ -75,6 +75,34 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/email-actions/:id - Update
+router.patch('/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { name, accountId, senderPattern, subjectPattern, actionType, actionValue } = req.body;
+
+    const existing = await prisma.emailAction.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Action not found' });
+      return;
+    }
+
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (accountId !== undefined) data.accountId = accountId || null;
+    if (senderPattern !== undefined) data.senderPattern = senderPattern || null;
+    if (subjectPattern !== undefined) data.subjectPattern = subjectPattern || null;
+    if (actionType !== undefined) data.actionType = actionType;
+    if (actionValue !== undefined) data.actionValue = actionValue;
+
+    const updated = await prisma.emailAction.update({ where: { id }, data });
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating email action:', error);
+    res.status(500).json({ error: 'Failed to update email action' });
+  }
+});
+
 // DELETE /api/email-actions/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {

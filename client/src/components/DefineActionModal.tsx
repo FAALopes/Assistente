@@ -1,28 +1,39 @@
 import { useState, useEffect } from 'react';
 import { Modal, Form, Input, Select, message, Typography } from 'antd';
-import type { Email, EmailAccount } from '../types';
-import { createEmailAction } from '../api';
+import type { Email, EmailAccount, EmailAction } from '../types';
+import { createEmailAction, updateEmailAction } from '../api';
 
 const { Text } = Typography;
 
 interface Props {
   open: boolean;
-  email: Email | null;
+  email?: Email | null;
+  action?: EmailAction | null; // for edit mode
   accounts: EmailAccount[];
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }
 
-function DefineActionModal({ open, email, accounts, onClose, onCreated }: Props) {
+function DefineActionModal({ open, email, action, accounts, onClose, onSaved }: Props) {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
+  const isEdit = !!action;
 
   useEffect(() => {
-    if (open && email) {
-      // Pre-fill with email context
+    if (!open) return;
+    if (action) {
+      // Edit mode
+      form.setFieldsValue({
+        name: action.name,
+        accountId: action.accountId || undefined,
+        senderPattern: action.senderPattern || '',
+        subjectPattern: action.subjectPattern || '',
+        actionValue: action.actionValue,
+      });
+    } else if (email) {
+      // Create mode with email context
       const senderMatch = email.from?.match(/<(.+)>$/);
       const senderAddr = senderMatch ? senderMatch[1] : email.from;
-      // Use the domain of sender as default pattern (more reusable)
       const domain = senderAddr?.split('@')[1] || senderAddr;
       form.setFieldsValue({
         name: `Abrir portal de ${domain}`,
@@ -31,28 +42,41 @@ function DefineActionModal({ open, email, accounts, onClose, onCreated }: Props)
         subjectPattern: '',
         actionValue: '',
       });
+    } else {
+      form.resetFields();
     }
-  }, [open, email, form]);
+  }, [open, email, action, form]);
 
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
       setSubmitting(true);
-      await createEmailAction({
-        name: values.name,
-        accountId: values.accountId || null,
-        senderPattern: values.senderPattern || null,
-        subjectPattern: values.subjectPattern || null,
-        actionType: 'OPEN_URL',
-        actionValue: values.actionValue,
-      });
-      message.success('Ação criada');
-      onCreated();
+      if (isEdit && action) {
+        await updateEmailAction(action.id, {
+          name: values.name,
+          accountId: values.accountId || null,
+          senderPattern: values.senderPattern || null,
+          subjectPattern: values.subjectPattern || null,
+          actionValue: values.actionValue,
+        });
+        message.success('Ação atualizada');
+      } else {
+        await createEmailAction({
+          name: values.name,
+          accountId: values.accountId || null,
+          senderPattern: values.senderPattern || null,
+          subjectPattern: values.subjectPattern || null,
+          actionType: 'OPEN_URL',
+          actionValue: values.actionValue,
+        });
+        message.success('Ação criada');
+      }
+      onSaved();
       onClose();
       form.resetFields();
     } catch (err: any) {
-      if (err?.errorFields) return; // validation
-      message.error('Erro ao criar ação');
+      if (err?.errorFields) return;
+      message.error(isEdit ? 'Erro ao atualizar ação' : 'Erro ao criar ação');
     } finally {
       setSubmitting(false);
     }
@@ -60,16 +84,16 @@ function DefineActionModal({ open, email, accounts, onClose, onCreated }: Props)
 
   return (
     <Modal
-      title="Definir ação para este tipo de email"
+      title={isEdit ? 'Editar ação' : 'Definir ação para este tipo de email'}
       open={open}
       onOk={handleOk}
       onCancel={() => { onClose(); form.resetFields(); }}
       confirmLoading={submitting}
-      okText="Criar ação"
+      okText={isEdit ? 'Guardar' : 'Criar ação'}
       cancelText="Cancelar"
       width={560}
     >
-      {email && (
+      {email && !isEdit && (
         <div style={{ background: '#f5f5f5', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 12 }}>
           <div><Text type="secondary">Email:</Text> <Text>{email.subject || '(sem assunto)'}</Text></div>
           <div><Text type="secondary">De:</Text> <Text>{email.from}</Text></div>
