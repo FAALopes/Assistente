@@ -8,6 +8,7 @@ import {
   InboxOutlined,
   ThunderboltOutlined,
   PlusOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { matchEmailAction } from '../api';
 import DefineActionModal from './DefineActionModal';
@@ -97,6 +98,7 @@ function EmailList({
   const [matchedAction, setMatchedAction] = useState<EmailAction | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
   const [defineModalEmail, setDefineModalEmail] = useState<Email | null>(null);
+  const [editingAction, setEditingAction] = useState<EmailAction | null>(null);
 
   useEffect(() => {
     if (!ctxMenu) {
@@ -133,6 +135,12 @@ function EmailList({
   const handleDefineAction = () => {
     if (!ctxMenu) return;
     setDefineModalEmail(ctxMenu.email);
+    setCtxMenu(null);
+  };
+
+  const handleEditAction = () => {
+    if (!matchedAction) return;
+    setEditingAction(matchedAction);
     setCtxMenu(null);
   };
 
@@ -484,29 +492,47 @@ function EmailList({
           {matchLoading ? (
             <div style={{ padding: '8px 12px', fontSize: 12, color: '#8c8c8c' }}>A procurar ação...</div>
           ) : matchedAction ? (
-            <div
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                borderRadius: 4,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 13,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              onClick={handleRunAction}
-              title={matchedAction.actionValue}
-            >
-              <ThunderboltOutlined style={{ color: '#faad14' }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div>Executar ação</div>
-                <div style={{ fontSize: 11, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {matchedAction.name}
+            <>
+              <div
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 13,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                onClick={handleRunAction}
+                title={matchedAction.actionValue}
+              >
+                <ThunderboltOutlined style={{ color: '#faad14' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div>Executar ação</div>
+                  <div style={{ fontSize: 11, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {matchedAction.name}
+                  </div>
                 </div>
               </div>
-            </div>
+              <div
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  borderRadius: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 13,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                onClick={handleEditAction}
+              >
+                <EditOutlined /> Editar ação
+              </div>
+            </>
           ) : (
             <div style={{ padding: '8px 12px', fontSize: 11, color: '#8c8c8c' }}>
               Nenhuma ação definida para este email
@@ -537,6 +563,13 @@ function EmailList({
         email={defineModalEmail}
         accounts={accounts}
         onClose={() => setDefineModalEmail(null)}
+        onSaved={() => { /* refresh not strictly needed */ }}
+      />
+      <DefineActionModal
+        open={editingAction !== null}
+        action={editingAction}
+        accounts={accounts}
+        onClose={() => setEditingAction(null)}
         onSaved={() => { /* refresh not strictly needed */ }}
       />
     </div>
