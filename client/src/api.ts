@@ -207,3 +207,9 @@ export async function matchEmailAction(emailId: string): Promise<EmailActionMatc
   const { data } = await api.get<EmailActionMatch>(`/api/email-actions/match/${emailId}`);
   return data;
 }
+
+// Auto-cleanup
+export async function triggerAutoCleanup(): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>('/api/auto-cleanup/run');
+  return data;
+}

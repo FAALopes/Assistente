@@ -9,6 +9,7 @@ import authRoutes from './routes/auth';
 import emailRoutes from './routes/emails';
 import ruleRoutes from './routes/rules';
 import emailActionRoutes from './routes/emailActions';
+import { startAutoCleanup, runCleanup } from './services/autoCleanup';
 
 export const prisma = new PrismaClient();
 
@@ -72,6 +73,17 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+// Manual trigger for auto-cleanup (useful for testing and on-demand runs)
+app.post('/api/auto-cleanup/run', async (_req, res) => {
+  try {
+    runCleanup().catch(e => console.error('[AutoCleanup] Manual run error:', e));
+    res.json({ message: 'Auto-cleanup started in background. Check server logs for progress.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Assistente backend running on port ${PORT}`);
+  startAutoCleanup();
 });
