@@ -5,8 +5,8 @@ import { classifyJunkEmails, TriageActionType } from './triageService';
 // Confidence threshold: only auto-delete junk emails that AI is very sure about
 const AUTO_DELETE_CONFIDENCE_THRESHOLD = 85;
 
-// How often to run auto-cleanup (4 hours)
-const CLEANUP_INTERVAL_MS = 4 * 60 * 60 * 1000;
+// How often to run auto-cleanup (1 hour)
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 // Folder to clean
 const JUNK_FOLDER = 'junkemail';
