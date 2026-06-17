@@ -77,7 +77,7 @@ router.get('/anthropic-test', async (_req: Request, res: Response) => {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 50,
       messages: [{ role: 'user', content: 'Say "OK" only.' }],
     });
