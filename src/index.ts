@@ -75,13 +75,13 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// Manual trigger for auto-cleanup (useful for testing and on-demand runs)
+// Manual trigger for auto-cleanup. Awaits completion and returns detailed result.
 app.post('/api/auto-cleanup/run', async (_req, res) => {
   try {
-    runCleanup().catch(e => console.error('[AutoCleanup] Manual run error:', e));
-    res.json({ message: 'Auto-cleanup started in background. Check server logs for progress.' });
+    const results = await runCleanup();
+    res.json({ results });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
 

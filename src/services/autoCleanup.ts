@@ -138,17 +138,19 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
   return result;
 }
 
-async function runCleanup(): Promise<void> {
+async function runCleanup(): Promise<CleanupResult[]> {
   console.log('[AutoCleanup] Starting scheduled junk cleanup...');
   const accounts = await prisma.emailAccount.findMany({
     where: { provider: 'MICROSOFT' },
     select: { id: true, email: true },
   });
 
+  const results: CleanupResult[] = [];
   let totalDeleted = 0;
   for (const acc of accounts) {
     try {
       const r = await cleanupAccount(acc.id, acc.email);
+      results.push(r);
       totalDeleted += r.deleted;
       console.log(`[AutoCleanup] ${acc.email}: synced=${r.synced} classified=${r.classified} deleted=${r.deleted} errors=${r.errors.length}`);
       if (r.errors.length > 0) {
@@ -156,9 +158,11 @@ async function runCleanup(): Promise<void> {
       }
     } catch (e: any) {
       console.error(`[AutoCleanup] Failed for ${acc.email}: ${e.message}`);
+      results.push({ accountEmail: acc.email, synced: 0, classified: 0, deleted: 0, errors: [e.message] });
     }
   }
   console.log(`[AutoCleanup] Done. Total deleted: ${totalDeleted}`);
+  return results;
 }
 
 export function startAutoCleanup(): void {
