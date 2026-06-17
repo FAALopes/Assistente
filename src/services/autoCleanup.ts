@@ -2,8 +2,8 @@ import { prisma } from '../index';
 import { getValidToken, fetchEmails as graphFetchEmails, deleteEmail as graphDeleteEmail } from './graphService';
 import { classifyJunkEmails, TriageActionType } from './triageService';
 
-// Confidence threshold: only auto-delete junk emails that AI is very sure about
-const AUTO_DELETE_CONFIDENCE_THRESHOLD = 85;
+// Confidence threshold: only auto-delete junk emails that AI is reasonably sure about
+const AUTO_DELETE_CONFIDENCE_THRESHOLD = 75;
 
 // How often to run auto-cleanup (1 hour)
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
