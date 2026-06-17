@@ -90,6 +90,12 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
       const classifications = await classifyJunkEmails(junkEmails);
       result.classified = classifications.length;
       for (const c of classifications) {
+        // Do NOT cache failed classifications (confidence=0 = AI error fallback)
+        // Leaving them uncached so the next cron tick retries them.
+        if (c.confidence === 0) {
+          result.errors.push(`Skipped caching failed classification for ${c.emailId}`);
+          continue;
+        }
         try {
           await prisma.email.update({
             where: { id: c.emailId },

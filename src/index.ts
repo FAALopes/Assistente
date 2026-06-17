@@ -9,6 +9,7 @@ import authRoutes from './routes/auth';
 import emailRoutes from './routes/emails';
 import ruleRoutes from './routes/rules';
 import emailActionRoutes from './routes/emailActions';
+import diagnosticsRoutes from './routes/diagnostics';
 import { startAutoCleanup, runCleanup } from './services/autoCleanup';
 
 export const prisma = new PrismaClient();
@@ -47,6 +48,7 @@ app.use('/auth', authRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/rules', ruleRoutes);
 app.use('/api/email-actions', emailActionRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 
 // Serve frontend static files in production
 const clientPath = path.join(__dirname, '..', 'dist', 'client');

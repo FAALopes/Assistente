@@ -493,8 +493,9 @@ router.post('/triage', async (req: Request, res: Response) => {
     if (needsClassification.length > 0) {
       newClassifications = await classifyJunkEmails(needsClassification);
 
-      // Save classifications to DB
+      // Save classifications to DB (skip failed ones so they get retried)
       for (const c of newClassifications) {
+        if (c.confidence === 0) continue; // AI error fallback — don't cache
         try {
           await prisma.email.update({
             where: { id: c.emailId },
