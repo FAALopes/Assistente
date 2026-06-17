@@ -63,6 +63,39 @@ router.get('/triage-stats', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/diagnostics/anthropic-test - Direct test of Anthropic API
+router.get('/anthropic-test', async (_req: Request, res: Response) => {
+  const hasKey = !!process.env.ANTHROPIC_API_KEY;
+  const keyPrefix = process.env.ANTHROPIC_API_KEY?.substring(0, 12) || null;
+
+  if (!hasKey) {
+    res.json({ hasKey: false, error: 'ANTHROPIC_API_KEY not set in environment' });
+    return;
+  }
+
+  try {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 50,
+      messages: [{ role: 'user', content: 'Say "OK" only.' }],
+    });
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : 'no text';
+    res.json({ hasKey: true, keyPrefix, success: true, response: text });
+  } catch (error: any) {
+    res.json({
+      hasKey: true,
+      keyPrefix,
+      success: false,
+      errorMessage: error?.message,
+      errorStatus: error?.status,
+      errorType: error?.error?.type,
+      errorBody: error?.error,
+    });
+  }
+});
+
 // POST /api/diagnostics/reset-failed-triage - One-shot: reset emails stuck with confidence=0
 router.post('/reset-failed-triage', async (_req: Request, res: Response) => {
   try {
