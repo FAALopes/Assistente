@@ -137,6 +137,24 @@ router.get('/anthropic-test', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/diagnostics/overrides?q=SEARCH - List triage overrides (learned preferences)
+router.get('/overrides', async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string || '').toLowerCase();
+    const overrides = await prisma.triageOverride.findMany({
+      orderBy: [{ occurrences: 'desc' }, { updatedAt: 'desc' }],
+    });
+    const filtered = q
+      ? overrides.filter(o =>
+          o.senderAddress.toLowerCase().includes(q) ||
+          o.senderDomain.toLowerCase().includes(q))
+      : overrides;
+    res.json({ total: overrides.length, matched: filtered.length, overrides: filtered });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /api/diagnostics/reset-failed-triage - One-shot: reset emails stuck with confidence=0
 router.post('/reset-failed-triage', async (_req: Request, res: Response) => {
   try {
