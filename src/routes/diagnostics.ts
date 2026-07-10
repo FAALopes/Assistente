@@ -63,6 +63,47 @@ router.get('/triage-stats', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/diagnostics/last-cleanup-activity - Show when classifications happened
+router.get('/last-cleanup-activity', async (_req: Request, res: Response) => {
+  try {
+    const accounts = await prisma.emailAccount.findMany({
+      select: { id: true, email: true },
+    });
+    const activity: any[] = [];
+    for (const acc of accounts) {
+      const last = await prisma.email.findFirst({
+        where: { accountId: acc.id, triageClassifiedAt: { not: null } },
+        orderBy: { triageClassifiedAt: 'desc' },
+        select: { triageClassifiedAt: true, from: true, subject: true, triageAction: true, triageConfidence: true },
+      });
+      const classifiedLastHour = await prisma.email.count({
+        where: {
+          accountId: acc.id,
+          triageClassifiedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+        },
+      });
+      const classifiedLast24h = await prisma.email.count({
+        where: {
+          accountId: acc.id,
+          triageClassifiedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      });
+      activity.push({
+        email: acc.email,
+        lastClassifiedAt: last?.triageClassifiedAt,
+        lastEmailSubject: last?.subject,
+        lastEmailAction: last?.triageAction,
+        lastEmailConfidence: last?.triageConfidence,
+        classifiedLastHour,
+        classifiedLast24h,
+      });
+    }
+    res.json({ nowUtc: new Date().toISOString(), activity });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/diagnostics/anthropic-test - Direct test of Anthropic API
 router.get('/anthropic-test', async (_req: Request, res: Response) => {
   const hasKey = !!process.env.ANTHROPIC_API_KEY;
