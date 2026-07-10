@@ -38,42 +38,78 @@ Sê conservador: em caso de dúvida, classifica como REVIEW em vez de DELETE. É
 /**
  * Classify junk emails using AI + learned overrides
  */
+// Extract display name from "Name <email>" or plain email
+function extractDisplayName(sender: string): string | null {
+  if (!sender) return null;
+  const match = sender.match(/^(.+?)\s*<[^>]+>\s*$/);
+  const raw = match ? match[1] : sender;
+  const cleaned = raw.replace(/^"|"$/g, '').trim().toLowerCase();
+  // If cleaned looks like an email (has @), no useful display name
+  if (!cleaned || cleaned.includes('@')) return null;
+  return cleaned;
+}
+
+// Minimum aggregate DELETE overrides to trigger auto-DELETE by display name
+const NAME_AGGREGATE_THRESHOLD = 3;
+
 export async function classifyJunkEmails(emails: EmailForTriage[]): Promise<TriageClassification[]> {
   if (emails.length === 0) return [];
 
-  // Step 1: Check for learned overrides
+  // Step 1a: Exact sender-address overrides (confirmed twice)
   const senderAddresses = [...new Set(emails.map(e => e.from))];
-  const overrides = await prisma.triageOverride.findMany({
+  const exactOverrides = await prisma.triageOverride.findMany({
     where: {
       senderAddress: { in: senderAddresses },
-      occurrences: { gte: 2 }, // Only apply if confirmed at least twice
+      occurrences: { gte: 2 },
     },
   });
-
-  const overrideMap = new Map<string, { action: TriageActionType; }>();
-  for (const override of overrides) {
-    // Use the most recent user decision for this sender
-    overrideMap.set(override.senderAddress, {
-      action: override.userDecision as TriageActionType,
-    });
+  const exactMap = new Map<string, TriageActionType>();
+  for (const o of exactOverrides) {
+    exactMap.set(o.senderAddress, o.userDecision as TriageActionType);
   }
 
-  // Step 2: Separate emails with known overrides from those needing AI
+  // Step 1b: Aggregate DELETE overrides by display name (catches rotating-domain spam)
+  //   e.g., "Orangetheory Fitness" appears in 21 overrides across different domains → auto-DELETE
+  const allDeleteOverrides = await prisma.triageOverride.findMany({
+    where: { userDecision: 'DELETE' as any },
+    select: { senderAddress: true, occurrences: true },
+  });
+  const deleteCountByName = new Map<string, number>();
+  for (const o of allDeleteOverrides) {
+    const name = extractDisplayName(o.senderAddress);
+    if (!name) continue;
+    deleteCountByName.set(name, (deleteCountByName.get(name) || 0) + o.occurrences);
+  }
+
+  // Step 2: Separate emails with known preferences from those needing AI
   const results: TriageClassification[] = [];
   const needsAI: EmailForTriage[] = [];
 
   for (const email of emails) {
-    const override = overrideMap.get(email.from);
-    if (override) {
+    // Priority 1: exact sender match (confirmed twice)
+    const exact = exactMap.get(email.from);
+    if (exact) {
       results.push({
         emailId: email.id,
-        action: override.action,
-        reason: 'Baseado na sua preferência anterior',
+        action: exact,
+        reason: 'Baseado na sua preferência anterior (remetente exato)',
         confidence: 95,
       });
-    } else {
-      needsAI.push(email);
+      continue;
     }
+    // Priority 2: aggregate display-name match (≥N DELETE overrides for this name)
+    const name = extractDisplayName(email.from);
+    const nameCount = name ? deleteCountByName.get(name) || 0 : 0;
+    if (name && nameCount >= NAME_AGGREGATE_THRESHOLD) {
+      results.push({
+        emailId: email.id,
+        action: 'DELETE',
+        reason: `Padrão de spam detectado: já apagou ${nameCount} emails de "${name}"`,
+        confidence: 95,
+      });
+      continue;
+    }
+    needsAI.push(email);
   }
 
   // Step 3: Batch AI classification
@@ -178,9 +214,12 @@ export async function recordOverride(
   aiDecision: TriageActionType,
   userDecision: TriageActionType,
 ): Promise<void> {
-  const senderDomain = senderAddress.includes('@')
-    ? senderAddress.split('@')[1]
-    : senderAddress;
+  // Extract domain: handles "Name <user@domain.com>" and plain "user@domain.com"
+  const emailMatch = senderAddress.match(/<([^>]+)>/);
+  const emailPart = emailMatch ? emailMatch[1] : senderAddress;
+  const senderDomain = emailPart.includes('@')
+    ? emailPart.split('@')[1].replace(/>$/, '').trim().toLowerCase()
+    : emailPart.replace(/>$/, '').trim().toLowerCase();
 
   await prisma.triageOverride.upsert({
     where: {
