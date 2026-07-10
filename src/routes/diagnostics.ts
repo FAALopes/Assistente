@@ -173,4 +173,22 @@ router.post('/reset-failed-triage', async (_req: Request, res: Response) => {
   }
 });
 
+// POST /api/diagnostics/reset-all-junk-triage - One-shot: reset ALL junk classifications for re-run
+router.post('/reset-all-junk-triage', async (_req: Request, res: Response) => {
+  try {
+    const result = await prisma.email.updateMany({
+      where: { folder: 'junkemail' },
+      data: {
+        triageAction: null,
+        triageReason: null,
+        triageConfidence: null,
+        triageClassifiedAt: null,
+      },
+    });
+    res.json({ reset: result.count });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
