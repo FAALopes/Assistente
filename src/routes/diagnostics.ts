@@ -191,4 +191,35 @@ router.post('/reset-all-junk-triage', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/diagnostics/find-emails?q=SEARCH - Find emails by sender/subject substring
+router.get('/find-emails', async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string || '').trim();
+    if (!q) {
+      res.status(400).json({ error: 'q param required' });
+      return;
+    }
+    const emails = await prisma.email.findMany({
+      where: {
+        OR: [
+          { from: { contains: q, mode: 'insensitive' } },
+          { subject: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: 100,
+      select: {
+        id: true, from: true, subject: true, folder: true,
+        receivedAt: true, triageAction: true, triageConfidence: true, triageReason: true,
+      },
+    });
+    // Group by folder
+    const byFolder: Record<string, number> = {};
+    for (const e of emails) byFolder[e.folder] = (byFolder[e.folder] || 0) + 1;
+    res.json({ total: emails.length, byFolder, emails });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
