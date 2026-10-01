@@ -21,13 +21,24 @@ interface MailFolder {
   unreadItemCount: number;
 }
 
-const msalClient = new ConfidentialClientApplication({
-  auth: {
-    clientId: process.env.AZURE_CLIENT_ID || '',
-    authority: 'https://login.microsoftonline.com/common',
-    clientSecret: process.env.AZURE_CLIENT_SECRET || '',
-  },
-});
+// Build MSAL client dynamically so we can read the client secret from the DB
+// (allowing users to rotate the secret via the app UI without a redeploy).
+async function getMsalClient(): Promise<ConfidentialClientApplication> {
+  let clientSecret = process.env.AZURE_CLIENT_SECRET || '';
+  try {
+    const config = await prisma.appConfig.findUnique({ where: { id: 'singleton' } });
+    if (config?.azureClientSecret) clientSecret = config.azureClientSecret;
+  } catch {
+    // Table may not exist on first startup — fall back to env
+  }
+  return new ConfidentialClientApplication({
+    auth: {
+      clientId: process.env.AZURE_CLIENT_ID || '',
+      authority: 'https://login.microsoftonline.com/common',
+      clientSecret,
+    },
+  });
+}
 
 /**
  * Refresh the access token using the refresh token stored in DB.
@@ -40,6 +51,7 @@ export async function refreshAccessToken(accountId: string): Promise<string> {
   }
 
   try {
+    const msalClient = await getMsalClient();
     const result = await msalClient.acquireTokenByRefreshToken({
       refreshToken: account.refreshToken,
       scopes: ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'],

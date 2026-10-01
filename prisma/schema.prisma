@@ -122,6 +122,16 @@ model Rule {
   @@map("rules")
 }
 
+model AppConfig {
+  id                   String   @id @default("singleton")
+  azureClientSecret    String?
+  azureClientSecretUpdatedAt DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("app_config")
+}
+
 model EmailAction {
   id              String   @id @default(uuid())
   name            String

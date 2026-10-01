@@ -213,3 +213,31 @@ export async function triggerAutoCleanup(): Promise<{ message: string }> {
   const { data } = await api.post<{ message: string }>('/api/auto-cleanup/run');
   return data;
 }
+
+// Config (Azure client secret rotation)
+export interface AppConfig {
+  azureClientId: string | null;
+  azureClientSecretSource: 'database' | 'environment' | 'none';
+  azureClientSecretMasked: string | null;
+  azureClientSecretUpdatedAt: string | null;
+}
+
+export async function getAppConfig(): Promise<AppConfig> {
+  const { data } = await api.get<AppConfig>('/api/config');
+  return data;
+}
+
+export async function updateAppConfig(azureClientSecret: string): Promise<void> {
+  await api.patch('/api/config', { azureClientSecret });
+}
+
+export async function testAzureConfig(): Promise<{
+  success: boolean;
+  testedAccount?: string;
+  errorMessage?: string;
+  errorCode?: string;
+  reason?: string;
+}> {
+  const { data } = await api.post('/api/config/test-azure');
+  return data;
+}

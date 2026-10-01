@@ -6,15 +6,22 @@ const router = Router();
 
 const SCOPES = ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'];
 
-const msalConfig = {
-  auth: {
-    clientId: process.env.AZURE_CLIENT_ID || '',
-    authority: 'https://login.microsoftonline.com/common',
-    clientSecret: process.env.AZURE_CLIENT_SECRET || '',
-  },
-};
+// Build MSAL client dynamically so client secret can be rotated via UI (DB → env fallback)
+async function getMsalClient(): Promise<ConfidentialClientApplication> {
+  let clientSecret = process.env.AZURE_CLIENT_SECRET || '';
+  try {
+    const config = await prisma.appConfig.findUnique({ where: { id: 'singleton' } });
+    if (config?.azureClientSecret) clientSecret = config.azureClientSecret;
+  } catch { /* table may not exist yet */ }
+  return new ConfidentialClientApplication({
+    auth: {
+      clientId: process.env.AZURE_CLIENT_ID || '',
+      authority: 'https://login.microsoftonline.com/common',
+      clientSecret,
+    },
+  });
+}
 
-const msalClient = new ConfidentialClientApplication(msalConfig);
 const cryptoProvider = new CryptoProvider();
 
 // Extend express-session types
@@ -42,6 +49,7 @@ router.get('/microsoft', async (req: Request, res: Response) => {
       challenge,
     };
 
+    const msalClient = await getMsalClient();
     const authCodeUrl = await msalClient.getAuthCodeUrl({
       scopes: SCOPES,
       redirectUri: process.env.REDIRECT_URI || '',
@@ -73,6 +81,7 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       return;
     }
 
+    const msalClient = await getMsalClient();
     const tokenResponse = await msalClient.acquireTokenByCode({
       code,
       scopes: SCOPES,

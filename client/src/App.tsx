@@ -6,6 +6,7 @@ import {
   ThunderboltOutlined,
   FilterOutlined,
   AppstoreOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
 import EmailList from './components/EmailList';
@@ -16,6 +17,7 @@ import TriagePanel from './components/TriagePanel';
 import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
+import ConfigPanel from './components/ConfigPanel';
 import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications } from './api';
 import type {
   EmailAccount,
@@ -42,6 +44,7 @@ function App() {
   const [syncing, setSyncing] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
   const [rulePreviewOpen, setRulePreviewOpen] = useState(false);
   const [rulePreviewData, setRulePreviewData] = useState<RulePreviewResult | null>(null);
@@ -398,6 +401,12 @@ function App() {
               Regras
             </Button>
             <Button
+              icon={<KeyOutlined />}
+              onClick={() => setConfigOpen(true)}
+            >
+              Configurações
+            </Button>
+            <Button
               type="primary"
               icon={<SyncOutlined spin={syncing} />}
               onClick={handleSync}
@@ -491,6 +500,7 @@ function App() {
         onClose={() => setActionsOpen(false)}
         accounts={accounts}
       />
+      <ConfigPanel open={configOpen} onClose={() => setConfigOpen(false)} />
       <TriagePanel
         open={triageOpen}
         onClose={() => setTriageOpen(false)}
