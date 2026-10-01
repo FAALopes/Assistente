@@ -222,4 +222,86 @@ router.get('/find-emails', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/diagnostics/token-state - Show current token state per account
+router.get('/token-state', async (_req: Request, res: Response) => {
+  try {
+    const accounts = await prisma.emailAccount.findMany({
+      select: {
+        id: true, email: true, provider: true,
+        tokenExpiry: true, updatedAt: true, createdAt: true,
+        accessToken: true, refreshToken: true,
+      },
+    });
+    const now = new Date();
+    const info = accounts.map(a => ({
+      id: a.id,
+      email: a.email,
+      provider: a.provider,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      tokenExpiry: a.tokenExpiry,
+      expired: a.tokenExpiry ? new Date(a.tokenExpiry) < now : null,
+      minutesSinceUpdated: Math.round((now.getTime() - new Date(a.updatedAt).getTime()) / 60000),
+      hasAccessToken: !!a.accessToken,
+      accessTokenLen: a.accessToken?.length || 0,
+      hasRefreshToken: !!a.refreshToken,
+      refreshTokenLen: a.refreshToken?.length || 0,
+    }));
+    res.json({ nowUtc: now.toISOString(), accounts: info });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/diagnostics/try-refresh/:accountId - Attempt token refresh and return raw MSAL error
+router.post('/try-refresh/:accountId', async (req: Request, res: Response) => {
+  try {
+    const accountId = req.params.accountId as string;
+    const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+    if (!account) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+    if (!account.refreshToken) {
+      res.json({ success: false, reason: 'No refresh token stored for this account' });
+      return;
+    }
+
+    const { ConfidentialClientApplication } = await import('@azure/msal-node');
+    const msalClient = new ConfidentialClientApplication({
+      auth: {
+        clientId: process.env.MICROSOFT_CLIENT_ID!,
+        clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+        authority: `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID || 'common'}`,
+      },
+    });
+
+    try {
+      const result = await msalClient.acquireTokenByRefreshToken({
+        refreshToken: account.refreshToken,
+        scopes: ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'],
+      });
+      res.json({
+        success: true,
+        hasResult: !!result,
+        gotAccessToken: !!result?.accessToken,
+        expiresOn: result?.expiresOn,
+      });
+    } catch (error: any) {
+      res.json({
+        success: false,
+        errorMessage: error?.message,
+        errorName: error?.name,
+        errorCode: error?.errorCode,
+        subError: error?.subError,
+        correlationId: error?.correlationId,
+        statusCode: error?.statusCode,
+        responseBody: error?.responseBody,
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
 export default router;
