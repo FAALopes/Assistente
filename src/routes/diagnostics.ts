@@ -256,6 +256,9 @@ router.get('/token-state', async (_req: Request, res: Response) => {
 // POST /api/diagnostics/try-refresh/:accountId - Attempt token refresh and return raw MSAL error
 router.post('/try-refresh/:accountId', async (req: Request, res: Response) => {
   try {
+    const hasAzureId = !!process.env.AZURE_CLIENT_ID;
+    const hasAzureSecret = !!process.env.AZURE_CLIENT_SECRET;
+    const azureIdPrefix = process.env.AZURE_CLIENT_ID?.substring(0, 8);
     const accountId = req.params.accountId as string;
     const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
     if (!account) {
@@ -270,9 +273,9 @@ router.post('/try-refresh/:accountId', async (req: Request, res: Response) => {
     const { ConfidentialClientApplication } = await import('@azure/msal-node');
     const msalClient = new ConfidentialClientApplication({
       auth: {
-        clientId: process.env.MICROSOFT_CLIENT_ID!,
-        clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-        authority: `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID || 'common'}`,
+        clientId: process.env.AZURE_CLIENT_ID || '',
+        clientSecret: process.env.AZURE_CLIENT_SECRET || '',
+        authority: 'https://login.microsoftonline.com/common',
       },
     });
 
@@ -283,6 +286,7 @@ router.post('/try-refresh/:accountId', async (req: Request, res: Response) => {
       });
       res.json({
         success: true,
+        env: { hasAzureId, hasAzureSecret, azureIdPrefix },
         hasResult: !!result,
         gotAccessToken: !!result?.accessToken,
         expiresOn: result?.expiresOn,
@@ -290,6 +294,7 @@ router.post('/try-refresh/:accountId', async (req: Request, res: Response) => {
     } catch (error: any) {
       res.json({
         success: false,
+        env: { hasAzureId, hasAzureSecret, azureIdPrefix },
         errorMessage: error?.message,
         errorName: error?.name,
         errorCode: error?.errorCode,
