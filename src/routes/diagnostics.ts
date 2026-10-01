@@ -222,6 +222,21 @@ router.get('/find-emails', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/diagnostics/env-check - Verify env vars are set (does not reveal secrets)
+router.get('/env-check', async (_req: Request, res: Response) => {
+  res.json({
+    AZURE_CLIENT_ID: !!process.env.AZURE_CLIENT_ID,
+    AZURE_CLIENT_ID_len: process.env.AZURE_CLIENT_ID?.length || 0,
+    AZURE_CLIENT_ID_prefix: process.env.AZURE_CLIENT_ID?.substring(0, 8) || null,
+    AZURE_CLIENT_SECRET: !!process.env.AZURE_CLIENT_SECRET,
+    AZURE_CLIENT_SECRET_len: process.env.AZURE_CLIENT_SECRET?.length || 0,
+    AZURE_CLIENT_SECRET_prefix: process.env.AZURE_CLIENT_SECRET?.substring(0, 4) || null,
+    ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+    DATABASE_URL: !!process.env.DATABASE_URL,
+    NODE_ENV: process.env.NODE_ENV,
+  });
+});
+
 // GET /api/diagnostics/token-state - Show current token state per account
 router.get('/token-state', async (_req: Request, res: Response) => {
   try {
