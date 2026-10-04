@@ -1,10 +1,40 @@
 import { Router, Request, Response } from 'express';
 import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node';
+import crypto from 'crypto';
 import { prisma } from '../index';
 
 const router = Router();
 
 const SCOPES = ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'];
+
+// Stateless signed state (no session dependency — survives Railway restarts/multi-instance)
+const STATE_SECRET = process.env.SESSION_SECRET || process.env.AZURE_CLIENT_SECRET || 'dev-fallback-change-me';
+const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+
+function createSignedState(payloadObj: Record<string, string>): string {
+  const payload = Buffer.from(JSON.stringify({ ...payloadObj, ts: Date.now() })).toString('base64url');
+  const sig = crypto.createHmac('sha256', STATE_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifySignedState(state: string): Record<string, string> | null {
+  const parts = state.split('.');
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
+  const expectedSig = crypto.createHmac('sha256', STATE_SECRET).update(payload).digest('base64url');
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expBuf.length) return null;
+  if (!crypto.timingSafeEqual(sigBuf, expBuf)) return null;
+  try {
+    const obj = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const age = Date.now() - (obj.ts || 0);
+    if (age < 0 || age > STATE_MAX_AGE_MS) return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
 
 // Build MSAL client dynamically so client secret can be rotated via UI (DB → env fallback)
 async function getMsalClient(): Promise<ConfidentialClientApplication> {
@@ -24,38 +54,18 @@ async function getMsalClient(): Promise<ConfidentialClientApplication> {
 
 const cryptoProvider = new CryptoProvider();
 
-// Extend express-session types
-declare module 'express-session' {
-  interface SessionData {
-    csrfToken?: string;
-    pkceCodes?: {
-      challengeMethod: string;
-      verifier: string;
-      challenge: string;
-    };
-  }
-}
 
 // GET /auth/microsoft - Redirect to Microsoft login
-router.get('/microsoft', async (req: Request, res: Response) => {
+router.get('/microsoft', async (_req: Request, res: Response) => {
   try {
-    const csrfToken = cryptoProvider.createNewGuid();
-    const { verifier, challenge } = await cryptoProvider.generatePkceCodes();
-
-    req.session.csrfToken = csrfToken;
-    req.session.pkceCodes = {
-      challengeMethod: 'S256',
-      verifier,
-      challenge,
-    };
+    const nonce = cryptoProvider.createNewGuid();
+    const state = createSignedState({ nonce });
 
     const msalClient = await getMsalClient();
     const authCodeUrl = await msalClient.getAuthCodeUrl({
       scopes: SCOPES,
       redirectUri: process.env.REDIRECT_URI || '',
-      codeChallenge: challenge,
-      codeChallengeMethod: 'S256',
-      state: csrfToken,
+      state,
     });
 
     res.redirect(authCodeUrl);
@@ -75,9 +85,9 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate CSRF token
-    if (state !== req.session.csrfToken) {
-      res.status(403).json({ error: 'CSRF token mismatch' });
+    // Verify signed state (stateless CSRF — survives server restarts and multi-instance)
+    if (typeof state !== 'string' || !verifySignedState(state)) {
+      res.status(403).json({ error: 'Invalid or expired state' });
       return;
     }
 
@@ -86,7 +96,6 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       code,
       scopes: SCOPES,
       redirectUri: process.env.REDIRECT_URI || '',
-      codeVerifier: req.session.pkceCodes?.verifier,
     });
 
     if (!tokenResponse) {
@@ -144,10 +153,6 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
         },
       });
     }
-
-    // Clean session
-    delete req.session.csrfToken;
-    delete req.session.pkceCodes;
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/accounts?connected=true`);
