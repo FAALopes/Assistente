@@ -12,6 +12,7 @@ import emailActionRoutes from './routes/emailActions';
 import diagnosticsRoutes from './routes/diagnostics';
 import configRoutes from './routes/config';
 import { startAutoCleanup, runCleanup } from './services/autoCleanup';
+import { requireAuth, requireAuthOrCronToken } from './middleware/auth';
 
 export const prisma = new PrismaClient();
 
@@ -45,7 +46,21 @@ app.get('/health', (_req, res) => {
 });
 
 // Routes
-app.use('/auth', authRoutes);
+app.use('/auth', authRoutes); // login/callback/me/logout public; /auth/accounts* protected inside the router
+
+// Manual/cron trigger for auto-cleanup: session OR Authorization: Bearer <CRON_TOKEN>.
+// Registered before the global /api guard so the cron (no session) can reach it.
+app.post('/api/auto-cleanup/run', requireAuthOrCronToken, async (_req, res) => {
+  try {
+    const results = await runCleanup();
+    res.json({ results });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Everything else under /api requires a logged-in session
+app.use('/api', requireAuth);
 app.use('/api/emails', emailRoutes);
 app.use('/api/rules', ruleRoutes);
 app.use('/api/email-actions', emailActionRoutes);
@@ -75,16 +90,6 @@ process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   process.exit(0);
-});
-
-// Manual trigger for auto-cleanup. Awaits completion and returns detailed result.
-app.post('/api/auto-cleanup/run', async (_req, res) => {
-  try {
-    const results = await runCleanup();
-    res.json({ results });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message, stack: error.stack });
-  }
 });
 
 app.listen(PORT, () => {

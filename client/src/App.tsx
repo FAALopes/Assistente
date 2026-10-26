@@ -7,6 +7,7 @@ import {
   FilterOutlined,
   AppstoreOutlined,
   KeyOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
 import EmailList from './components/EmailList';
@@ -18,7 +19,7 @@ import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
 import ConfigPanel from './components/ConfigPanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
 import type {
   EmailAccount,
   Email,
@@ -413,6 +414,16 @@ function App() {
               loading={syncing}
             >
               Sincronizar
+            </Button>
+            <Button
+              icon={<LogoutOutlined />}
+              title="Terminar sessão"
+              onClick={async () => {
+                try { await logout(); } catch { /* ignore */ }
+                window.location.href = '/';
+              }}
+            >
+              Sair
             </Button>
           </Space>
         </Header>

@@ -24,6 +24,33 @@ const api = axios.create({
   },
 });
 
+// Session expired or missing: send the user to the Microsoft login.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && !window.location.pathname.startsWith('/auth/')) {
+      window.location.href = '/auth/microsoft';
+      return new Promise(() => {}); // never resolves; page is navigating away
+    }
+    return Promise.reject(error);
+  },
+);
+
+// Session
+export interface AuthMe {
+  authenticated: boolean;
+  user?: { email: string; displayName?: string | null };
+}
+
+export async function getMe(): Promise<AuthMe> {
+  const { data } = await api.get<AuthMe>('/auth/me');
+  return data;
+}
+
+export async function logout(): Promise<void> {
+  await api.post('/auth/logout');
+}
+
 // Accounts
 export async function getAccounts(): Promise<EmailAccount[]> {
   const { data } = await api.get<EmailAccount[]>('/auth/accounts');

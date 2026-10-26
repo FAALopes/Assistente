@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node';
 import crypto from 'crypto';
 import { prisma } from '../index';
+import { requireAuth, allowedEmailsFromEnv } from '../middleware/auth';
 
 const router = Router();
 
@@ -104,6 +105,7 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
     }
 
     const { accessToken, account, expiresOn } = tokenResponse;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     // Extract refresh token from MSAL cache
     let refreshToken: string | null = null;
@@ -124,10 +126,23 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
     });
     const profile: any = await profileRes.json();
 
-    // Upsert email account
+    const profileEmail: string = profile.mail || profile.userPrincipalName || '';
+
+    // Who may start a session: an already-logged-in user adding an account,
+    // an email already connected in this app, or one listed in ALLOWED_EMAILS.
     const existingAccount = await prisma.emailAccount.findFirst({
-      where: { email: profile.mail || profile.userPrincipalName },
+      where: { email: { equals: profileEmail, mode: 'insensitive' } },
     });
+    const allowed =
+      Boolean(req.session.user) ||
+      Boolean(existingAccount) ||
+      allowedEmailsFromEnv().includes(profileEmail.toLowerCase());
+
+    if (!allowed) {
+      console.warn(`Login rejected for ${profileEmail}: not an allowed account`);
+      res.redirect(`${frontendUrl}/?error=not_authorized`);
+      return;
+    }
 
     if (existingAccount) {
       await prisma.emailAccount.update({
@@ -154,7 +169,9 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       });
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    if (!req.session.user) {
+      req.session.user = { email: profileEmail, displayName: profile.displayName || null };
+    }
     res.redirect(`${frontendUrl}/accounts?connected=true`);
   } catch (error) {
     console.error('Error in Microsoft callback:', error);
@@ -162,6 +179,26 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
     res.redirect(`${frontendUrl}/accounts?error=auth_failed`);
   }
 });
+
+// GET /auth/me - Current session (public; the frontend uses it to decide whether to show login)
+router.get('/me', (req: Request, res: Response) => {
+  if (req.session.user) {
+    res.json({ authenticated: true, user: req.session.user });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
+
+// POST /auth/logout - End session
+router.post('/logout', (req: Request, res: Response) => {
+  req.session.destroy(() => {
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
+
+// Everything below requires a logged-in session
+router.use(requireAuth);
 
 // GET /auth/accounts - List connected accounts
 router.get('/accounts', async (_req: Request, res: Response) => {
