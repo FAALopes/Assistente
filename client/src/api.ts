@@ -24,12 +24,14 @@ const api = axios.create({
   },
 });
 
-// Session expired or missing: send the user to the Microsoft login.
+// Session expired or missing: back to the login page (AuthGate shows the form).
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401 && !window.location.pathname.startsWith('/auth/')) {
-      window.location.href = '/auth/microsoft';
+    const status = error?.response?.status;
+    const url: string = error?.config?.url || '';
+    if (status === 401 && !url.includes('/auth/login')) {
+      window.location.href = '/?error=session_expired';
       return new Promise(() => {}); // never resolves; page is navigating away
     }
     return Promise.reject(error);
@@ -39,7 +41,12 @@ api.interceptors.response.use(
 // Session
 export interface AuthMe {
   authenticated: boolean;
-  user?: { email: string; displayName?: string | null };
+  user?: { username: string };
+}
+
+export async function login(username: string, password: string): Promise<AuthMe> {
+  const { data } = await api.post<AuthMe>('/auth/login', { username, password });
+  return data;
 }
 
 export async function getMe(): Promise<AuthMe> {

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node';
 import crypto from 'crypto';
 import { prisma } from '../index';
-import { requireAuth, allowedEmailsFromEnv } from '../middleware/auth';
+import { requireAuth, isAuthenticated, verifyCredentials, loginRateLimit, recordLoginFailure, clearLoginFailures } from '../middleware/auth';
 
 const router = Router();
 
@@ -56,7 +56,55 @@ async function getMsalClient(): Promise<ConfidentialClientApplication> {
 const cryptoProvider = new CryptoProvider();
 
 
-// GET /auth/microsoft - Redirect to Microsoft login
+// POST /auth/login - Local user/password login (ADMIN_USER / ADMIN_PASSWORD_HASH)
+router.post('/login', loginRateLimit, (req: Request, res: Response) => {
+  const { username, password } = req.body || {};
+  if (typeof username !== 'string' || typeof password !== 'string' || !verifyCredentials(username, password)) {
+    recordLoginFailure(req);
+    res.status(401).json({ error: 'Credenciais inválidas' });
+    return;
+  }
+  clearLoginFailures(req);
+  req.session.regenerate((err) => {
+    if (err) {
+      res.status(500).json({ error: 'Falha ao iniciar sessão' });
+      return;
+    }
+    req.session.user = { username: username.trim().toLowerCase() };
+    res.json({ authenticated: true, user: req.session.user });
+  });
+});
+
+// GET /auth/me - Current session (public; the frontend uses it to decide whether to show login)
+router.get('/me', (req: Request, res: Response) => {
+  if (req.session.user) {
+    res.json({ authenticated: true, user: req.session.user });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
+
+// POST /auth/logout - End session
+router.post('/logout', (req: Request, res: Response) => {
+  req.session.destroy(() => {
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
+
+// Everything below (Microsoft connect flow and account management) requires a logged-in session.
+// The callback keeps the session cookie because it is a top-level GET navigation (sameSite=lax).
+// Browser navigations to /auth/microsoft* without session go back to the login page instead of JSON.
+router.use((req: Request, res: Response, next) => {
+  if (isAuthenticated(req)) return next();
+  if (req.method === 'GET' && req.path.startsWith('/microsoft')) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/?error=session_expired`);
+  }
+  return requireAuth(req, res, next);
+});
+
+// GET /auth/microsoft - Redirect to Microsoft login (connects an email account)
 router.get('/microsoft', async (_req: Request, res: Response) => {
   try {
     const nonce = cryptoProvider.createNewGuid();
@@ -128,21 +176,9 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
 
     const profileEmail: string = profile.mail || profile.userPrincipalName || '';
 
-    // Who may start a session: an already-logged-in user adding an account,
-    // an email already connected in this app, or one listed in ALLOWED_EMAILS.
     const existingAccount = await prisma.emailAccount.findFirst({
       where: { email: { equals: profileEmail, mode: 'insensitive' } },
     });
-    const allowed =
-      Boolean(req.session.user) ||
-      Boolean(existingAccount) ||
-      allowedEmailsFromEnv().includes(profileEmail.toLowerCase());
-
-    if (!allowed) {
-      console.warn(`Login rejected for ${profileEmail}: not an allowed account`);
-      res.redirect(`${frontendUrl}/?error=not_authorized`);
-      return;
-    }
 
     if (existingAccount) {
       await prisma.emailAccount.update({
@@ -169,9 +205,6 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       });
     }
 
-    if (!req.session.user) {
-      req.session.user = { email: profileEmail, displayName: profile.displayName || null };
-    }
     res.redirect(`${frontendUrl}/accounts?connected=true`);
   } catch (error) {
     console.error('Error in Microsoft callback:', error);
@@ -179,26 +212,6 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
     res.redirect(`${frontendUrl}/accounts?error=auth_failed`);
   }
 });
-
-// GET /auth/me - Current session (public; the frontend uses it to decide whether to show login)
-router.get('/me', (req: Request, res: Response) => {
-  if (req.session.user) {
-    res.json({ authenticated: true, user: req.session.user });
-  } else {
-    res.json({ authenticated: false });
-  }
-});
-
-// POST /auth/logout - End session
-router.post('/logout', (req: Request, res: Response) => {
-  req.session.destroy(() => {
-    res.clearCookie('connect.sid');
-    res.json({ success: true });
-  });
-});
-
-// Everything below requires a logged-in session
-router.use(requireAuth);
 
 // GET /auth/accounts - List connected accounts
 router.get('/accounts', async (_req: Request, res: Response) => {
