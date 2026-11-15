@@ -72,6 +72,10 @@ export async function updateAccount(
   return data;
 }
 
+export async function moveAccount(id: string, direction: 'up' | 'down'): Promise<void> {
+  await api.post(`/auth/accounts/${id}/move`, { direction });
+}
+
 // Emails
 export async function getEmails(
   params?: EmailFilters,

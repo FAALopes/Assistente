@@ -13,6 +13,7 @@ export interface EmailAccount {
   provider: 'MICROSOFT' | 'GMAIL' | 'IMAP';
   displayName: string | null;
   color?: string | null;
+  sortOrder?: number;
   createdAt: string;
   _count?: { emails: number };
 }

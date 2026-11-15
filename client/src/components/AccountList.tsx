@@ -12,9 +12,12 @@ import {
   EditOutlined,
   BgColorsOutlined,
   CloseOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import type { EmailAccount, FoldersByAccount } from '../types';
-import { updateAccount } from '../api';
+import { updateAccount, moveAccount } from '../api';
 import { COLOR_PALETTE } from '../constants/colorPalette';
 
 const { Text } = Typography;
@@ -58,7 +61,6 @@ const folderColors: Record<string, string> = {
   archive: '#722ed1',
 };
 
-// Compute readable text color based on background brightness
 function textColorFor(bg?: string | null): string {
   if (!bg) return '#000';
   const hex = bg.replace('#', '');
@@ -76,6 +78,24 @@ interface ContextMenuState {
   y: number;
 }
 
+const COLLAPSED_KEY = 'assistente.collapsedAccounts';
+
+function loadCollapsed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsed(s: Set<string>): void {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(Array.from(s)));
+  } catch { /* storage unavailable */ }
+}
+
 function AccountList({
   accounts,
   foldersByAccount,
@@ -90,6 +110,7 @@ function AccountList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const editInputRef = useRef<InputRef>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -108,6 +129,15 @@ function AccountList({
       window.removeEventListener('scroll', handler, true);
     };
   }, [menu]);
+
+  const toggleCollapsed = (accountId: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(accountId)) next.delete(accountId); else next.add(accountId);
+      saveCollapsed(next);
+      return next;
+    });
+  };
 
   const startRename = (account: EmailAccount) => {
     setEditingId(account.id);
@@ -137,7 +167,26 @@ function AccountList({
     }
   };
 
+  const doMove = async (accountId: string, direction: 'up' | 'down') => {
+    setMenu(null);
+    try {
+      await moveAccount(accountId, direction);
+      onAccountUpdated?.();
+    } catch {
+      message.error('Erro ao mover conta');
+    }
+  };
+
+  const viewOnlyAccount = (accountId: string) => {
+    setMenu(null);
+    onSelectAccount(accountId);
+    onSelectFolder(undefined);
+  };
+
   const menuAccount = menu ? accounts.find(a => a.id === menu.accountId) : null;
+  const menuIndex = menu ? accounts.findIndex(a => a.id === menu.accountId) : -1;
+  const canMoveUp = menuIndex > 0;
+  const canMoveDown = menuIndex !== -1 && menuIndex < accounts.length - 1;
 
   return (
     <div style={{ padding: '12px' }}>
@@ -174,10 +223,13 @@ function AccountList({
           const bg = account.color;
           const fg = textColorFor(bg);
           const isEditing = editingId === account.id;
+          const isCollapsed = collapsed.has(account.id);
+          const folders = foldersByAccount[account.id] || [];
+          const inboxCount = folders.find(f => f.id === 'inbox')?.count ?? 0;
+          const totalCount = account._count?.emails ?? 0;
 
           return (
             <div key={account.id} style={{ marginBottom: 8 }}>
-              {/* Account row */}
               <div
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -196,13 +248,7 @@ function AccountList({
                 }}
                 onClick={() => {
                   if (isEditing) return;
-                  if (isAccountSelected) {
-                    onSelectAccount(undefined);
-                    onSelectFolder(undefined);
-                  } else {
-                    onSelectAccount(account.id);
-                    onSelectFolder(undefined);
-                  }
+                  toggleCollapsed(account.id);
                 }}
               >
                 <Space size={6} style={{ flex: 1, minWidth: 0 }}>
@@ -257,67 +303,80 @@ function AccountList({
                     )}
                   </div>
                 </Space>
-                {account._count && account._count.emails > 0 && (
-                  <Tag color="blue" style={{ fontSize: 11 }}>
-                    {account._count.emails}
-                  </Tag>
-                )}
-              </div>
-
-              {/* Folder sub-items */}
-              <div style={{ paddingLeft: 20, marginTop: 2 }}>
-                {(foldersByAccount[account.id] || []).map((folder) => {
-                  const isFolderSelected =
-                    selectedAccountId === account.id && selectedFolder === folder.id;
-                  const icon = folderIcons[folder.id] || <FolderOutlined />;
-                  const color = folderColors[folder.id] || '#8c8c8c';
-
-                  return (
-                    <div
-                      key={folder.id}
-                      style={{
-                        padding: '4px 10px',
-                        cursor: 'pointer',
-                        borderRadius: 6,
-                        background: isFolderSelected ? '#e6f4ff' : 'transparent',
-                        border: isFolderSelected ? '1px solid #91caff' : '1px solid transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'background 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isFolderSelected) {
-                          (e.currentTarget as HTMLDivElement).style.background = '#f5f5f5';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isFolderSelected) {
-                          (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                        }
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isFolderSelected) {
-                          onSelectFolder(undefined);
-                          onSelectAccount(account.id);
-                        } else {
-                          onSelectAccount(account.id);
-                          onSelectFolder(folder.id);
-                        }
-                      }}
+                <Space size={4}>
+                  {isCollapsed && (
+                    <Tag
+                      color="blue"
+                      style={{ fontSize: 10, margin: 0 }}
+                      title="Inbox"
                     >
-                      <Space size={6}>
-                        <span style={{ color, fontSize: 13 }}>{icon}</span>
-                        <Text style={{ fontSize: 12 }}>{folder.label}</Text>
-                      </Space>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        {folder.count}
-                      </Text>
-                    </div>
-                  );
-                })}
+                      <InboxOutlined style={{ marginRight: 2 }} />
+                      {inboxCount}
+                    </Tag>
+                  )}
+                  {totalCount > 0 && (
+                    <Tag color="default" style={{ fontSize: 10, margin: 0 }} title="Total">
+                      {totalCount}
+                    </Tag>
+                  )}
+                </Space>
               </div>
+
+              {!isCollapsed && (
+                <div style={{ paddingLeft: 20, marginTop: 2 }}>
+                  {folders.map((folder) => {
+                    const isFolderSelected =
+                      selectedAccountId === account.id && selectedFolder === folder.id;
+                    const icon = folderIcons[folder.id] || <FolderOutlined />;
+                    const color = folderColors[folder.id] || '#8c8c8c';
+
+                    return (
+                      <div
+                        key={folder.id}
+                        style={{
+                          padding: '4px 10px',
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          background: isFolderSelected ? '#e6f4ff' : 'transparent',
+                          border: isFolderSelected ? '1px solid #91caff' : '1px solid transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'background 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isFolderSelected) {
+                            (e.currentTarget as HTMLDivElement).style.background = '#f5f5f5';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isFolderSelected) {
+                            (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                          }
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isFolderSelected) {
+                            onSelectFolder(undefined);
+                            onSelectAccount(account.id);
+                          } else {
+                            onSelectAccount(account.id);
+                            onSelectFolder(folder.id);
+                          }
+                        }}
+                      >
+                        <Space size={6}>
+                          <span style={{ color, fontSize: 13 }}>{icon}</span>
+                          <Text style={{ fontSize: 12 }}>{folder.label}</Text>
+                        </Space>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {folder.count}
+                        </Text>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         }}
@@ -348,7 +407,6 @@ function AccountList({
         </Text>
       </div>
 
-      {/* Context menu */}
       {menu && menuAccount && (
         <div
           onClick={(e) => e.stopPropagation()}
@@ -366,6 +424,56 @@ function AccountList({
             border: '1px solid #f0f0f0',
           }}
         >
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: 'pointer',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={() => viewOnlyAccount(menuAccount.id)}
+          >
+            <EyeOutlined /> Ver só esta conta
+          </div>
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: canMoveUp ? 'pointer' : 'not-allowed',
+              opacity: canMoveUp ? 1 : 0.4,
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { if (canMoveUp) e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={() => { if (canMoveUp) doMove(menuAccount.id, 'up'); }}
+          >
+            <ArrowUpOutlined /> Subir
+          </div>
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: canMoveDown ? 'pointer' : 'not-allowed',
+              opacity: canMoveDown ? 1 : 0.4,
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { if (canMoveDown) e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={() => { if (canMoveDown) doMove(menuAccount.id, 'down'); }}
+          >
+            <ArrowDownOutlined /> Descer
+          </div>
           <div
             style={{
               padding: '8px 12px',

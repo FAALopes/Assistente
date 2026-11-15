@@ -223,16 +223,63 @@ router.get('/accounts', async (_req: Request, res: Response) => {
         displayName: true,
         color: true,
         provider: true,
+        sortOrder: true,
         createdAt: true,
         _count: { select: { emails: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
 
     res.json(accounts);
   } catch (error) {
     console.error('Error fetching accounts:', error);
     res.status(500).json({ error: 'Failed to fetch accounts' });
+  }
+});
+
+// POST /auth/accounts/:id/move - Swap sortOrder with the previous/next account
+router.post('/accounts/:id/move', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const direction = (req.body?.direction as string) || '';
+    if (direction !== 'up' && direction !== 'down') {
+      res.status(400).json({ error: 'direction must be "up" or "down"' });
+      return;
+    }
+
+    const accounts = await prisma.emailAccount.findMany({
+      select: { id: true, sortOrder: true, createdAt: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    const idx = accounts.findIndex(a => a.id === id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= accounts.length) {
+      res.json({ moved: false });
+      return;
+    }
+
+    // Normalize first so ties don't break the swap
+    const normalized = accounts.map((acc, i) => ({ ...acc, sortOrder: (i + 1) * 10 }));
+    const a = normalized[idx];
+    const b = normalized[swapIdx];
+
+    await prisma.$transaction([
+      ...normalized.map(acc =>
+        prisma.emailAccount.update({ where: { id: acc.id }, data: { sortOrder: acc.sortOrder } }),
+      ),
+      prisma.emailAccount.update({ where: { id: a.id }, data: { sortOrder: b.sortOrder } }),
+      prisma.emailAccount.update({ where: { id: b.id }, data: { sortOrder: a.sortOrder } }),
+    ]);
+
+    res.json({ moved: true });
+  } catch (error) {
+    console.error('Error moving account:', error);
+    res.status(500).json({ error: 'Failed to move account' });
   }
 });
 

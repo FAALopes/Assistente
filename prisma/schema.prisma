@@ -57,6 +57,7 @@ model EmailAccount {
   refreshToken String?
   tokenExpiry  DateTime?
   userId       String?
+  sortOrder    Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   emails       Email[]
