@@ -4,7 +4,6 @@ import type { InputRef } from 'antd';
 import {
   WindowsOutlined,
   GoogleOutlined,
-  PlusOutlined,
   InboxOutlined,
   DeleteOutlined,
   SendOutlined,
@@ -389,8 +388,7 @@ function AccountList({
 
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Button
-          type="primary"
-          icon={<PlusOutlined />}
+          icon={<WindowsOutlined style={{ color: '#0078d4' }} />}
           block
           href="/auth/microsoft"
         >
