@@ -115,6 +115,7 @@ function AccountList({
   const editInputRef = useRef<InputRef>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
   const [imapModalOpen, setImapModalOpen] = useState(false);
+  const [gmailModalOpen, setGmailModalOpen] = useState(false);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -403,10 +404,9 @@ function AccountList({
           Adicionar conta IMAP
         </Button>
         <Button
-          icon={<GoogleOutlined />}
+          icon={<GoogleOutlined style={{ color: '#ea4335' }} />}
           block
-          disabled
-          title="Em breve"
+          onClick={() => setGmailModalOpen(true)}
         >
           Adicionar conta Gmail
         </Button>
@@ -414,7 +414,7 @@ function AccountList({
           type="secondary"
           style={{ fontSize: 11, textAlign: 'center' }}
         >
-          Gmail disponivel em breve
+          Gmail requer App Password (2FA activo)
         </Text>
       </div>
 
@@ -422,6 +422,16 @@ function AccountList({
         open={imapModalOpen}
         onClose={() => setImapModalOpen(false)}
         onCreated={() => onAccountUpdated?.()}
+      />
+      <AddImapModal
+        open={gmailModalOpen}
+        onClose={() => setGmailModalOpen(false)}
+        onCreated={() => onAccountUpdated?.()}
+        title="Adicionar conta Gmail"
+        presetHost="imap.gmail.com"
+        presetPort={993}
+        presetTls={true}
+        passwordHelp="Usa a App Password de 16 chars (nao a password normal da conta Google)"
       />
 
       {menu && menuAccount && (

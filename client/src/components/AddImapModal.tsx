@@ -8,6 +8,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  presetHost?: string;
+  presetPort?: number;
+  presetTls?: boolean;
+  title?: string;
+  passwordHelp?: string;
 }
 
 interface FormValues {
@@ -20,7 +25,7 @@ interface FormValues {
   tls: boolean;
 }
 
-function AddImapModal({ open, onClose, onCreated }: Props) {
+function AddImapModal({ open, onClose, onCreated, presetHost, presetPort, presetTls, title, passwordHelp }: Props) {
   const [form] = Form.useForm<FormValues>();
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -67,14 +72,14 @@ function AddImapModal({ open, onClose, onCreated }: Props) {
     const host = form.getFieldValue('host');
     const user = form.getFieldValue('user');
     const domain = val.split('@')[1];
-    if (!host && domain) form.setFieldValue('host', `mail.${domain}`);
+    if (!host && domain) form.setFieldValue('host', presetHost || `mail.${domain}`);
     if (!user) form.setFieldValue('user', val);
   };
 
   return (
     <Modal
       open={open}
-      title="Adicionar conta IMAP"
+      title={title || 'Adicionar conta IMAP'}
       onCancel={() => { setTestResult(null); onClose(); }}
       footer={null}
       destroyOnClose
@@ -82,7 +87,11 @@ function AddImapModal({ open, onClose, onCreated }: Props) {
       <Form<FormValues>
         form={form}
         layout="vertical"
-        initialValues={{ port: 993, tls: true }}
+        initialValues={{
+          host: presetHost,
+          port: presetPort ?? 993,
+          tls: presetTls ?? true,
+        }}
       >
         <Form.Item
           label="Email"
@@ -113,7 +122,7 @@ function AddImapModal({ open, onClose, onCreated }: Props) {
         <Form.Item label="Utilizador" name="user" rules={[{ required: true }]} help="Normalmente o email completo">
           <Input placeholder="fernando.lopes@cdfeirense.pt" />
         </Form.Item>
-        <Form.Item label="Password" name="password" rules={[{ required: true }]}>
+        <Form.Item label="Password" name="password" rules={[{ required: true }]} help={passwordHelp}>
           <Input.Password />
         </Form.Item>
 
