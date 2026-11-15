@@ -135,7 +135,7 @@ function App() {
         await new Promise(r => setTimeout(r, 1500));
         const job = await getSyncStatus(jobId);
         if (!job) break;
-        const pct = job.foldersTotal > 0 ? Math.round((job.foldersDone / job.foldersTotal) * 100) : 0;
+        const pct = job.foldersTotal > 0 ? Math.min(100, Math.round((job.foldersDone / job.foldersTotal) * 100)) : 0;
         setSyncStatus(`${pct}% - ${job.currentFolder || job.phase || ''} (${job.emailsSynced} emails)`);
         if (job.status === 'done' || job.status === 'error') {
           if (job.status === 'done') {

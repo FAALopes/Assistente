@@ -102,7 +102,9 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
   }
 
   // 2) For each folder, delta sync
-  await updateJob(state.jobId, { phase: 'emails', foldersTotal: folders.length });
+  // Accumulate foldersTotal across accounts (do not overwrite)
+  const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
+  await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
   for (const folder of folders) {
     await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
     try {
@@ -184,7 +186,8 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
     await prisma.mailFolder.deleteMany({ where: { accountId, id: { in: toDrop } } });
   }
 
-  await updateJob(state.jobId, { phase: 'emails', foldersTotal: folders.length });
+  const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
+  await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
   for (const folder of folders) {
     await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
     try {
