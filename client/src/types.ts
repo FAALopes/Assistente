@@ -45,9 +45,27 @@ export interface EmailFolder {
   id: string;
   label: string;
   count: number;
+  path?: string;
+  depth?: number;
+  wellKnownName?: string | null;
+  parentId?: string | null;
 }
 
 export type FoldersByAccount = Record<string, EmailFolder[]>;
+
+export interface SyncJob {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'error';
+  phase: string | null;
+  currentFolder: string | null;
+  foldersTotal: number;
+  foldersDone: number;
+  emailsSynced: number;
+  emailsRemoved: number;
+  errors: string[] | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
 
 export interface Rule {
   id: string;

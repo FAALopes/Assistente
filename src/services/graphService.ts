@@ -205,3 +205,182 @@ export async function getMailFolders(accessToken: string): Promise<MailFolder[]>
     throw new Error('Failed to fetch mail folders from Microsoft Graph');
   }
 }
+
+export interface FlatFolder {
+  id: string;
+  displayName: string;
+  parentId: string | null;
+  path: string;
+  depth: number;
+  wellKnownName: string | null;
+  totalItemCount: number;
+  unreadItemCount: number;
+}
+
+/**
+ * Well-known folder names in Microsoft Graph (exposed via /me/mailFolders/{name}).
+ * We derive the well-known name by matching displayName against the top-level folders.
+ */
+const WELL_KNOWN_BY_NAME: Record<string, string> = {
+  'Inbox': 'inbox',
+  'Caixa de Entrada': 'inbox',
+  'Junk Email': 'junkemail',
+  'E-mail de Lixo Eletronico': 'junkemail',
+  'E-mail de Lixo Eletrónico': 'junkemail',
+  'Sent Items': 'sentitems',
+  'Itens Enviados': 'sentitems',
+  'Drafts': 'drafts',
+  'Rascunhos': 'drafts',
+  'Deleted Items': 'deleteditems',
+  'Itens Eliminados': 'deleteditems',
+  'Archive': 'archive',
+  'Arquivo': 'archive',
+  'Outbox': 'outbox',
+  'A Enviar': 'outbox',
+  'Conversation History': 'conversationhistory',
+  'Historico de Conversas': 'conversationhistory',
+  'Histórico de Conversas': 'conversationhistory',
+};
+
+/**
+ * Enumerate ALL mail folders recursively, including user-created and nested.
+ * Returns a flat list with path strings ("Inbox/Projectos/Assistente").
+ */
+export async function listAllMailFoldersFlat(accessToken: string): Promise<FlatFolder[]> {
+  const client = createGraphClient(accessToken);
+  const flat: FlatFolder[] = [];
+
+  async function fetchChildren(parentPath: string, parentId: string | null, depth: number): Promise<void> {
+    const url = parentId
+      ? `/me/mailFolders/${parentId}/childFolders`
+      : '/me/mailFolders';
+    let next: string | null = url;
+    while (next) {
+      const resp: any = await client
+        .api(next)
+        .top(100)
+        .select('id,displayName,parentFolderId,totalItemCount,unreadItemCount,childFolderCount')
+        .get();
+      const items: any[] = resp.value || [];
+      for (const f of items) {
+        const path = parentPath ? `${parentPath}/${f.displayName}` : f.displayName;
+        const wk = depth === 0 ? (WELL_KNOWN_BY_NAME[f.displayName] || null) : null;
+        flat.push({
+          id: f.id,
+          displayName: f.displayName,
+          parentId: parentId,
+          path,
+          depth,
+          wellKnownName: wk,
+          totalItemCount: f.totalItemCount || 0,
+          unreadItemCount: f.unreadItemCount || 0,
+        });
+        if ((f.childFolderCount || 0) > 0) {
+          await fetchChildren(path, f.id, depth + 1);
+        }
+      }
+      next = resp['@odata.nextLink'] || null;
+      // Graph returns absolute URLs on nextLink; the SDK accepts them directly
+    }
+  }
+
+  await fetchChildren('', null, 0);
+  return flat;
+}
+
+/**
+ * Fetch ALL emails from a folder, paginating until done (no artificial cap).
+ */
+export async function fetchAllEmailsFromFolder(
+  accessToken: string,
+  folderId: string,
+  onBatch?: (batch: GraphEmail[], totalSoFar: number) => Promise<void>,
+): Promise<number> {
+  const client = createGraphClient(accessToken);
+  let total = 0;
+  let skip = 0;
+  const pageSize = 200;
+
+  while (true) {
+    const resp: any = await client
+      .api(`/me/mailFolders/${folderId}/messages`)
+      .top(pageSize)
+      .skip(skip)
+      .select('id,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments')
+      .orderby('receivedDateTime desc')
+      .get();
+
+    const items: GraphEmail[] = resp.value || [];
+    total += items.length;
+    if (onBatch && items.length > 0) await onBatch(items, total);
+
+    if (items.length < pageSize) break;
+    skip += items.length;
+  }
+
+  return total;
+}
+
+export interface DeltaResult {
+  changed: GraphEmail[];
+  deleted: string[]; // external ids
+  deltaLink: string;
+}
+
+/**
+ * Delta sync for a folder: returns only changes since last deltaLink.
+ * On first call (no previous deltaLink) returns current state + a new deltaLink.
+ */
+export async function fetchFolderDelta(
+  accessToken: string,
+  folderId: string,
+  previousDeltaLink?: string | null,
+  onBatch?: (changed: GraphEmail[], deleted: string[], totalSoFar: number) => Promise<void>,
+): Promise<DeltaResult> {
+  const client = createGraphClient(accessToken);
+  const changedAll: GraphEmail[] = [];
+  const deletedAll: string[] = [];
+
+  let url: string = previousDeltaLink || `/me/mailFolders/${folderId}/messages/delta`;
+  let totalSoFar = 0;
+  let deltaLink = '';
+
+  while (true) {
+    let req = client.api(url);
+    // Only set select on the initial request (not on nextLink/deltaLink URLs)
+    if (!previousDeltaLink && !url.includes('$deltatoken') && !url.includes('$skiptoken')) {
+      req = req.select('id,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments');
+    }
+    const resp: any = await req.get();
+    const items: any[] = resp.value || [];
+    const batchChanged: GraphEmail[] = [];
+    const batchDeleted: string[] = [];
+    for (const item of items) {
+      if (item['@removed']) {
+        batchDeleted.push(item.id);
+      } else {
+        batchChanged.push(item as GraphEmail);
+      }
+    }
+    changedAll.push(...batchChanged);
+    deletedAll.push(...batchDeleted);
+    totalSoFar += items.length;
+    if (onBatch && items.length > 0) await onBatch(batchChanged, batchDeleted, totalSoFar);
+
+    const nextLink = resp['@odata.nextLink'];
+    const dLink = resp['@odata.deltaLink'];
+    if (dLink) { deltaLink = dLink; break; }
+    if (nextLink) { url = nextLink; continue; }
+    break;
+  }
+
+  return { changed: changedAll, deleted: deletedAll, deltaLink };
+}
+
+/**
+ * Move an email to a specific folder by id.
+ */
+export async function moveEmailToFolder(accessToken: string, emailId: string, destinationFolderId: string): Promise<void> {
+  const client = createGraphClient(accessToken);
+  await client.api(`/me/messages/${emailId}/move`).post({ destinationId: destinationFolderId });
+}

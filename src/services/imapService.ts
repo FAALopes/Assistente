@@ -95,6 +95,121 @@ export async function detectFolders(accountId: string): Promise<ImapFolderMap> {
   }
 }
 
+export interface ImapFlatFolder {
+  path: string;
+  displayName: string;
+  parentPath: string | null;
+  depth: number;
+  wellKnownName: string | null;
+  totalItemCount: number;
+}
+
+const IMAP_ROLE_TO_WK: Record<string, string> = {
+  inbox: 'inbox',
+  junk: 'junkemail',
+  trash: 'deleteditems',
+  sent: 'sentitems',
+  drafts: 'drafts',
+  archive: 'archive',
+};
+
+export async function listAllImapFolders(accountId: string): Promise<ImapFlatFolder[]> {
+  const client = await openClient(accountId);
+  try {
+    const list = await client.list();
+    const out: ImapFlatFolder[] = [];
+    for (const f of list) {
+      const path = f.path;
+      const delim = f.delimiter || '/';
+      const parts = path.split(delim);
+      const displayName = parts[parts.length - 1];
+      const parentPath = parts.length > 1 ? parts.slice(0, -1).join(delim) : null;
+      const depth = parts.length - 1;
+      const role = (f.specialUse || '').toLowerCase().replace('\\', '');
+      let wk: string | null = IMAP_ROLE_TO_WK[role] || null;
+      if (!wk && path.toUpperCase() === 'INBOX') wk = 'inbox';
+      // Get mailbox stats (exists/unseen). client.status is cheap on many servers.
+      let total = 0;
+      try {
+        const st: any = await client.status(path, { messages: true });
+        total = st?.messages || 0;
+      } catch { /* ignore */ }
+      out.push({ path, displayName, parentPath, depth, wellKnownName: wk, totalItemCount: total });
+    }
+    return out;
+  } finally {
+    await client.logout();
+  }
+}
+
+/**
+ * Fetch ALL messages in a folder (no cap). Calls onBatch periodically.
+ */
+export async function fetchAllImapMessages(
+  accountId: string,
+  folderPath: string,
+  onBatch?: (batch: MailEnvelope[], totalSoFar: number) => Promise<void>,
+  chunkSize = 500,
+): Promise<number> {
+  const client = await openClient(accountId);
+  let totalSoFar = 0;
+  try {
+    const lock = await client.getMailboxLock(folderPath);
+    try {
+      const mb: any = client.mailbox;
+      const total: number = mb?.exists || 0;
+      if (total === 0) return 0;
+      // Fetch in chunks from newest to oldest
+      let end = total;
+      while (end >= 1) {
+        const start = Math.max(1, end - chunkSize + 1);
+        const range = `${start}:${end}`;
+        const batch: MailEnvelope[] = [];
+        for await (const msg of client.fetch(range, {
+          uid: true,
+          envelope: true,
+          flags: true,
+          internalDate: true,
+          bodyStructure: true,
+          source: false,
+        } as any)) {
+          const env = msg.envelope as any;
+          const fromAddr = env?.from?.[0];
+          const toAddr = env?.to?.[0];
+          const flagsVal = msg.flags as unknown;
+          const flags = flagsVal instanceof Set ? flagsVal : new Set<string>(flagsVal as string[] | undefined);
+          const bs: any = msg.bodyStructure;
+          const hasAttachments = Boolean(bs && hasAttachmentPart(bs));
+          batch.push({
+            id: buildExternalId(accountId, folderPath, Number(msg.uid)),
+            from: fromAddr ? {
+              emailAddress: {
+                address: fromAddr.address ? `${fromAddr.address}` : undefined,
+                name: fromAddr.name || undefined,
+              },
+            } : undefined,
+            toRecipients: toAddr ? [{ emailAddress: { address: toAddr.address } }] : [],
+            subject: env?.subject || '',
+            bodyPreview: '',
+            receivedDateTime: (msg.internalDate || env?.date || new Date()).toISOString(),
+            isRead: flags.has('\\Seen'),
+            importance: null as any,
+            hasAttachments,
+          });
+        }
+        totalSoFar += batch.length;
+        if (onBatch && batch.length > 0) await onBatch(batch, totalSoFar);
+        end = start - 1;
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+  return totalSoFar;
+}
+
 export function buildExternalId(accountId: string, folder: string, uid: number): string {
   return `imap:${accountId}:${folder}:${uid}`;
 }

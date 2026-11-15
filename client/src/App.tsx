@@ -19,7 +19,7 @@ import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
 import ConfigPanel from './components/ConfigPanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
 import type {
   EmailAccount,
   Email,
@@ -43,6 +43,7 @@ function App() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>('');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
@@ -126,22 +127,38 @@ function App() {
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncStatus('A iniciar...');
     try {
-      const result = await syncEmails();
-      const removedTxt = result.removed ? `, ${result.removed} removidos` : '';
-      message.success(`${result.synced} emails sincronizados${removedTxt}`);
-      if (result.errors && result.errors.length > 0) {
-        Modal.warning({
-          title: `${result.errors.length} erro(s) durante sync`,
-          content: (
-            <ul style={{ margin: 0, paddingLeft: 20, maxHeight: 300, overflow: 'auto' }}>
-              {result.errors.map((e, i) => (
-                <li key={i} style={{ fontSize: 12, marginBottom: 4 }}>{e}</li>
-              ))}
-            </ul>
-          ),
-          width: 600,
-        });
+      const { jobId } = await syncEmails();
+      // Poll every 1500ms
+      while (true) {
+        await new Promise(r => setTimeout(r, 1500));
+        const job = await getSyncStatus(jobId);
+        if (!job) break;
+        const pct = job.foldersTotal > 0 ? Math.round((job.foldersDone / job.foldersTotal) * 100) : 0;
+        setSyncStatus(`${pct}% - ${job.currentFolder || job.phase || ''} (${job.emailsSynced} emails)`);
+        if (job.status === 'done' || job.status === 'error') {
+          if (job.status === 'done') {
+            const removedTxt = job.emailsRemoved ? `, ${job.emailsRemoved} removidos` : '';
+            message.success(`${job.emailsSynced} emails sincronizados${removedTxt}`);
+          } else {
+            message.error('Sync falhou');
+          }
+          if (job.errors && job.errors.length > 0) {
+            Modal.warning({
+              title: `${job.errors.length} erro(s) durante sync`,
+              content: (
+                <ul style={{ margin: 0, paddingLeft: 20, maxHeight: 300, overflow: 'auto' }}>
+                  {job.errors.map((e, i) => (
+                    <li key={i} style={{ fontSize: 12, marginBottom: 4 }}>{e}</li>
+                  ))}
+                </ul>
+              ),
+              width: 600,
+            });
+          }
+          break;
+        }
       }
       fetchEmails();
       fetchAccounts();
@@ -151,6 +168,7 @@ function App() {
       message.error('Erro ao sincronizar emails');
     } finally {
       setSyncing(false);
+      setSyncStatus('');
     }
   };
 
@@ -412,8 +430,9 @@ function App() {
               icon={<SyncOutlined spin={syncing} />}
               onClick={handleSync}
               loading={syncing}
+              title={syncStatus}
             >
-              Sincronizar
+              {syncing && syncStatus ? syncStatus : 'Sincronizar'}
             </Button>
             <Button
               icon={<LogoutOutlined />}

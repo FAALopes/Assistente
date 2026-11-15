@@ -111,8 +111,18 @@ export async function getFoldersByAccount(): Promise<FoldersByAccount> {
   return data;
 }
 
-export async function syncEmails(): Promise<{ synced: number; removed?: number; errors?: string[] }> {
-  const { data } = await api.post<{ synced: number; removed?: number; errors?: string[] }>('/api/emails/sync');
+export async function syncEmails(): Promise<{ jobId: string }> {
+  const { data } = await api.post<{ jobId: string }>('/api/emails/sync');
+  return data;
+}
+
+export async function getSyncStatus(jobId: string): Promise<import('./types').SyncJob> {
+  const { data } = await api.get<import('./types').SyncJob>(`/api/sync/status/${jobId}`);
+  return data;
+}
+
+export async function getLatestSyncJob(): Promise<import('./types').SyncJob | null> {
+  const { data } = await api.get<import('./types').SyncJob | null>('/api/sync/latest');
   return data;
 }
 

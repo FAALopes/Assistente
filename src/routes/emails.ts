@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { EmailCategory, RuleAction } from '@prisma/client';
 import { prisma } from '../index';
-import { fetchEmails as mailFetchEmails, deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, type FolderKey } from '../services/mailService';
+import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox } from '../services/mailService';
+import { startSyncJob } from '../services/syncJob';
 import { learnFromAction } from '../services/ruleEngine';
 import { classifyJunkEmails, recordOverride, TriageActionType, TriageClassification } from '../services/triageService';
 
@@ -80,170 +81,61 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Folders to sync for each Microsoft account
-const SYNC_FOLDERS: Array<{ graphName: FolderKey; label: string }> = [
-  { graphName: 'inbox', label: 'Inbox' },
-  { graphName: 'junkemail', label: 'E-mail de Lixo' },
-];
-
-// GET /api/emails/sync - Sync emails from all accounts
+// POST /api/emails/sync - Triggers the background sync job (returns immediately).
+// For progress, poll /api/sync/status/:jobId.
 router.post('/sync', async (_req: Request, res: Response) => {
   try {
-    const accounts = await prisma.emailAccount.findMany({
-      where: { provider: { in: ['MICROSOFT', 'IMAP'] } },
-    });
-
-    if (accounts.length === 0) {
-      res.json({ message: 'No accounts to sync', synced: 0 });
-      return;
-    }
-
-    let totalSynced = 0;
-    let totalRemoved = 0;
-    const errors: string[] = [];
-
-    console.log(`Starting sync for ${accounts.length} account(s)...`);
-
-    for (const account of accounts) {
-      try {
-        console.log(`Syncing account: ${account.email}`);
-
-        for (const folder of SYNC_FOLDERS) {
-          try {
-            console.log(`  Fetching folder: ${folder.label} (${folder.graphName})`);
-            const graphEmails = await mailFetchEmails(account.id, folder.graphName);
-            console.log(`  Got ${graphEmails.length} emails from ${folder.label}`);
-
-            // Collect all external IDs from the server for this folder
-            const serverExternalIds = new Set(graphEmails.map(e => e.id));
-
-            for (const graphEmail of graphEmails) {
-              const fromName = graphEmail.from?.emailAddress?.name || '';
-              const fromEmail = graphEmail.from?.emailAddress?.address || 'unknown';
-              const fromDisplay = fromName && fromName !== fromEmail
-                ? `${fromName} <${fromEmail}>`
-                : fromEmail;
-              const toAddress = graphEmail.toRecipients?.[0]?.emailAddress?.address || null;
-
-              await prisma.email.upsert({
-                where: { externalId: graphEmail.id },
-                create: {
-                  externalId: graphEmail.id,
-                  accountId: account.id,
-                  from: fromDisplay,
-                  to: toAddress,
-                  subject: graphEmail.subject || null,
-                  bodyPreview: graphEmail.bodyPreview || null,
-                  folder: folder.graphName,
-                  receivedAt: graphEmail.receivedDateTime
-                    ? new Date(graphEmail.receivedDateTime)
-                    : new Date(),
-                  isRead: graphEmail.isRead || false,
-                  importance: graphEmail.importance || null,
-                  hasAttachments: graphEmail.hasAttachments || false,
-                },
-                update: {
-                  from: fromDisplay,
-                  isRead: graphEmail.isRead || false,
-                  importance: graphEmail.importance || null,
-                  folder: folder.graphName,
-                },
-              });
-
-              totalSynced++;
-            }
-
-            // Remove emails from DB that no longer exist on the server for this account+folder
-            const localEmails = await prisma.email.findMany({
-              where: { accountId: account.id, folder: folder.graphName },
-              select: { id: true, externalId: true },
-            });
-
-            const toRemove = localEmails.filter(e => !serverExternalIds.has(e.externalId));
-            if (toRemove.length > 0) {
-              const removeIds = toRemove.map(e => e.id);
-              await prisma.email.deleteMany({ where: { id: { in: removeIds } } });
-              totalRemoved += toRemove.length;
-              console.log(`  Removed ${toRemove.length} emails no longer on server from ${folder.label}`);
-            }
-          } catch (folderErr: any) {
-            const msg = `Failed to sync folder ${folder.label} for ${account.email}: ${folderErr.message}`;
-            console.error(msg);
-            errors.push(msg);
-          }
-        }
-      } catch (err: any) {
-        const msg = `Failed to sync account ${account.email}: ${err.message}`;
-        console.error(msg);
-        errors.push(msg);
-      }
-    }
-
-    res.json({
-      message: `Sync complete`,
-      synced: totalSynced,
-      removed: totalRemoved,
-      accounts: accounts.length,
-      ...(errors.length > 0 && { errors }),
-    });
-  } catch (error) {
-    console.error('Error syncing emails:', error);
-    res.status(500).json({ error: 'Failed to sync emails' });
+    const jobId = await startSyncJob();
+    res.json({ message: 'Sync started', jobId });
+  } catch (error: any) {
+    console.error('Error starting sync:', error);
+    res.status(500).json({ error: 'Failed to start sync' });
   }
 });
 
 // GET /api/emails/folders - List available folders (optionally per account)
+// Reads from MailFolder table (populated by sync job) and joins with email counts.
 router.get('/folders', async (req: Request, res: Response) => {
   try {
     const { account } = req.query;
 
-    const folderLabels: Record<string, string> = {
-      inbox: 'Inbox',
-      junkemail: 'E-mail de Lixo',
-      sentitems: 'Enviados',
-      drafts: 'Rascunhos',
-      deleteditems: 'Eliminados',
-      archive: 'Arquivo',
-    };
-
-    // All accounts
     const accounts = await prisma.emailAccount.findMany({ select: { id: true } });
 
-    // Get counts grouped by account + folder
-    const folders = await prisma.email.groupBy({
+    const mailFolders = await prisma.mailFolder.findMany({
+      where: account && typeof account === 'string' ? { accountId: account } : {},
+      orderBy: [{ path: 'asc' }],
+    });
+
+    // Group email counts by account + folder
+    const counts = await prisma.email.groupBy({
       by: ['accountId', 'folder'],
       _count: { id: true },
     });
-
-    // Build a lookup: "accountId:folder" -> count
     const countMap: Record<string, number> = {};
-    for (const f of folders) {
-      countMap[`${f.accountId}:${f.folder}`] = f._count.id;
-    }
+    for (const c of counts) countMap[`${c.accountId}:${c.folder}`] = c._count.id;
+
+    const toRow = (f: typeof mailFolders[number]) => ({
+      id: f.id,
+      label: f.displayName,
+      path: f.path,
+      depth: f.depth,
+      wellKnownName: f.wellKnownName,
+      parentId: f.parentId,
+      count: countMap[`${f.accountId}:${f.id}`] || 0,
+    });
 
     if (account && typeof account === 'string') {
-      // Return folders for a specific account, always showing all SYNC_FOLDERS
-      const result = SYNC_FOLDERS.map((sf) => ({
-        id: sf.graphName,
-        label: folderLabels[sf.graphName] || sf.label,
-        count: countMap[`${account}:${sf.graphName}`] || 0,
-      }));
-
-      res.json(result);
-    } else {
-      // Return folders grouped by account, always showing all SYNC_FOLDERS per account
-      const byAccount: Record<string, Array<{ id: string; label: string; count: number }>> = {};
-
-      for (const acc of accounts) {
-        byAccount[acc.id] = SYNC_FOLDERS.map((sf) => ({
-          id: sf.graphName,
-          label: folderLabels[sf.graphName] || sf.label,
-          count: countMap[`${acc.id}:${sf.graphName}`] || 0,
-        }));
-      }
-
-      res.json(byAccount);
+      res.json(mailFolders.map(toRow));
+      return;
     }
+
+    const byAccount: Record<string, ReturnType<typeof toRow>[]> = {};
+    for (const acc of accounts) byAccount[acc.id] = [];
+    for (const f of mailFolders) {
+      if (!byAccount[f.accountId]) byAccount[f.accountId] = [];
+      byAccount[f.accountId].push(toRow(f));
+    }
+    res.json(byAccount);
   } catch (error) {
     console.error('Error fetching folders:', error);
     res.status(500).json({ error: 'Failed to fetch folders' });

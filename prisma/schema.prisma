@@ -66,8 +66,50 @@ model EmailAccount {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   emails       Email[]
+  folders      MailFolder[]
 
   @@map("email_accounts")
+}
+
+model MailFolder {
+  accountId      String
+  account        EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id             String   // Graph folder id or IMAP path (unique per account)
+  displayName    String
+  parentId       String?
+  path           String   // slash-joined ancestors + displayName
+  depth          Int      @default(0)
+  wellKnownName  String?  // inbox, junkemail, sentitems, drafts, deleteditems, archive, outbox, conversationhistory, ...
+  totalItemCount Int      @default(0)
+  unreadItemCount Int     @default(0)
+  deltaLink      String?  // Microsoft Graph delta token for incremental sync
+  lastSyncAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@id([accountId, id])
+  @@index([accountId])
+  @@index([accountId, path])
+  @@map("mail_folders")
+}
+
+model SyncJob {
+  id            String   @id @default(uuid())
+  accountId     String?
+  status        String   // queued | running | done | error
+  phase         String?  // folders | emails | cleanup
+  currentFolder String?
+  foldersTotal  Int      @default(0)
+  foldersDone   Int      @default(0)
+  emailsSynced  Int      @default(0)
+  emailsRemoved Int      @default(0)
+  errors        Json?
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("sync_jobs")
 }
 
 model Email {

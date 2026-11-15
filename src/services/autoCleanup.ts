@@ -8,8 +8,14 @@ const AUTO_DELETE_CONFIDENCE_THRESHOLD = 85;
 // How often to run auto-cleanup (1 hour)
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
-// Folder to clean
-const JUNK_FOLDER = 'junkemail' as const;
+// Resolve the actual junk folder id for an account (post-sync it's a Graph id or IMAP path)
+async function resolveJunkFolderId(accountId: string): Promise<string> {
+  const row = await prisma.mailFolder.findFirst({
+    where: { accountId, wellKnownName: 'junkemail' },
+    select: { id: true },
+  });
+  return row?.id || 'junkemail';
+}
 
 interface CleanupResult {
   accountEmail: string;
@@ -29,8 +35,9 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
   };
 
   try {
+    const JUNK_FOLDER = await resolveJunkFolderId(accountId);
     // 1. Sync junk folder to get latest emails
-    const graphEmails = await mailFetchEmails(accountId, JUNK_FOLDER);
+    const graphEmails = await mailFetchEmails(accountId, 'junkemail');
     const serverIds = new Set(graphEmails.map(e => e.id));
 
     for (const ge of graphEmails) {

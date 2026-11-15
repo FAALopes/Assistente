@@ -229,7 +229,7 @@ function AccountList({
           const isEditing = editingId === account.id;
           const isCollapsed = collapsed.has(account.id);
           const folders = foldersByAccount[account.id] || [];
-          const inboxCount = folders.find(f => f.id === 'inbox')?.count ?? 0;
+          const inboxCount = folders.find(f => (f.wellKnownName || f.id) === 'inbox')?.count ?? 0;
           const totalCount = account._count?.emails ?? 0;
 
           return (
@@ -335,14 +335,17 @@ function AccountList({
                   {folders.map((folder) => {
                     const isFolderSelected =
                       selectedAccountId === account.id && selectedFolder === folder.id;
-                    const icon = folderIcons[folder.id] || <FolderOutlined />;
-                    const color = folderColors[folder.id] || '#8c8c8c';
+                    const wk = folder.wellKnownName || folder.id;
+                    const icon = folderIcons[wk] || <FolderOutlined />;
+                    const color = folderColors[wk] || '#8c8c8c';
+                    const depth = folder.depth ?? 0;
 
                     return (
                       <div
                         key={folder.id}
                         style={{
                           padding: '4px 10px',
+                          paddingLeft: 10 + depth * 14,
                           cursor: 'pointer',
                           borderRadius: 6,
                           background: isFolderSelected ? '#e6f4ff' : 'transparent',
@@ -372,10 +375,20 @@ function AccountList({
                             onSelectFolder(folder.id);
                           }
                         }}
+                        title={folder.path || folder.label}
                       >
-                        <Space size={6}>
+                        <Space size={6} style={{ minWidth: 0, flex: 1 }}>
                           <span style={{ color, fontSize: 13 }}>{icon}</span>
-                          <Text style={{ fontSize: 12 }}>{folder.label}</Text>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {folder.label}
+                          </Text>
                         </Space>
                         <Text type="secondary" style={{ fontSize: 11 }}>
                           {folder.count}
