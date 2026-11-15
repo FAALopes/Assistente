@@ -311,15 +311,19 @@ function AccountList({
                   {isCollapsed && (
                     <Tag
                       color="blue"
-                      style={{ fontSize: 10, margin: 0 }}
+                      style={{ fontSize: 14, margin: 0, padding: '2px 8px', fontWeight: 600 }}
                       title="Inbox"
                     >
-                      <InboxOutlined style={{ marginRight: 2 }} />
+                      <InboxOutlined style={{ marginRight: 4 }} />
                       {inboxCount}
                     </Tag>
                   )}
                   {totalCount > 0 && (
-                    <Tag color="default" style={{ fontSize: 10, margin: 0 }} title="Total">
+                    <Tag
+                      color="default"
+                      style={{ fontSize: 14, margin: 0, padding: '2px 8px', fontWeight: 600 }}
+                      title="Total"
+                    >
                       {totalCount}
                     </Tag>
                   )}
