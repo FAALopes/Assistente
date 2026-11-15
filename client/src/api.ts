@@ -76,6 +76,26 @@ export async function moveAccount(id: string, direction: 'up' | 'down'): Promise
   await api.post(`/auth/accounts/${id}/move`, { direction });
 }
 
+export interface ImapCreateParams {
+  email: string;
+  displayName?: string;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  tls: boolean;
+}
+
+export async function testImapAccount(p: Omit<ImapCreateParams, 'email' | 'displayName'>): Promise<{ ok: boolean; folders?: string[]; error?: string }> {
+  const { data } = await api.post<{ ok: boolean; folders?: string[]; error?: string }>('/auth/accounts/imap/test', p);
+  return data;
+}
+
+export async function createImapAccount(p: ImapCreateParams): Promise<EmailAccount> {
+  const { data } = await api.post<EmailAccount>('/auth/accounts/imap', p);
+  return data;
+}
+
 // Emails
 export async function getEmails(
   params?: EmailFilters,

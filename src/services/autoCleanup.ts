@@ -1,5 +1,5 @@
 import { prisma } from '../index';
-import { getValidToken, fetchEmails as graphFetchEmails, deleteEmail as graphDeleteEmail } from './graphService';
+import { fetchEmails as mailFetchEmails, deleteEmail as mailDeleteEmail } from './mailService';
 import { classifyJunkEmails, TriageActionType } from './triageService';
 
 // Confidence threshold: only auto-delete junk emails that AI is very sure about
@@ -9,7 +9,7 @@ const AUTO_DELETE_CONFIDENCE_THRESHOLD = 85;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 // Folder to clean
-const JUNK_FOLDER = 'junkemail';
+const JUNK_FOLDER = 'junkemail' as const;
 
 interface CleanupResult {
   accountEmail: string;
@@ -29,10 +29,8 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
   };
 
   try {
-    const accessToken = await getValidToken(accountId);
-
     // 1. Sync junk folder to get latest emails
-    const graphEmails = await graphFetchEmails(accessToken, JUNK_FOLDER);
+    const graphEmails = await mailFetchEmails(accountId, JUNK_FOLDER);
     const serverIds = new Set(graphEmails.map(e => e.id));
 
     for (const ge of graphEmails) {
@@ -124,7 +122,7 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
 
     for (const email of toDelete) {
       try {
-        await graphDeleteEmail(accessToken, email.externalId);
+        await mailDeleteEmail(accountId, email.externalId);
         await prisma.email.delete({ where: { id: email.id } });
         result.deleted++;
       } catch (e: any) {
@@ -141,7 +139,7 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
 async function runCleanup(): Promise<CleanupResult[]> {
   console.log('[AutoCleanup] Starting scheduled junk cleanup...');
   const accounts = await prisma.emailAccount.findMany({
-    where: { provider: 'MICROSOFT' },
+    where: { provider: { in: ['MICROSOFT', 'IMAP'] } },
     select: { id: true, email: true },
   });
 

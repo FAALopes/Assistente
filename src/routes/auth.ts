@@ -3,6 +3,8 @@ import { ConfidentialClientApplication, CryptoProvider } from '@azure/msal-node'
 import crypto from 'crypto';
 import { prisma } from '../index';
 import { requireAuth, isAuthenticated, verifyCredentials, loginRateLimit, recordLoginFailure, clearLoginFailures } from '../middleware/auth';
+import { encryptSecret } from '../services/crypto';
+import { testImapConnection } from '../services/imapService';
 
 const router = Router();
 
@@ -322,6 +324,74 @@ router.patch('/accounts/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error updating account:', error);
     res.status(500).json({ error: 'Failed to update account' });
+  }
+});
+
+// POST /auth/accounts/imap/test - Test IMAP connection (no save)
+router.post('/accounts/imap/test', async (req: Request, res: Response) => {
+  const { host, port, user, password, tls } = req.body || {};
+  if (!host || !port || !user || !password) {
+    res.status(400).json({ error: 'host, port, user, password required' });
+    return;
+  }
+  const result = await testImapConnection({
+    host: String(host),
+    port: Number(port),
+    user: String(user),
+    password: String(password),
+    tls: tls !== false,
+  });
+  res.json(result);
+});
+
+// POST /auth/accounts/imap - Create IMAP account
+router.post('/accounts/imap', async (req: Request, res: Response) => {
+  try {
+    const { email, displayName, host, port, user, password, tls } = req.body || {};
+    if (!email || !host || !port || !user || !password) {
+      res.status(400).json({ error: 'email, host, port, user, password required' });
+      return;
+    }
+
+    const test = await testImapConnection({
+      host: String(host),
+      port: Number(port),
+      user: String(user),
+      password: String(password),
+      tls: tls !== false,
+    });
+    if (!test.ok) {
+      res.status(400).json({ error: `IMAP connect failed: ${test.error}` });
+      return;
+    }
+
+    const existing = await prisma.emailAccount.findFirst({
+      where: { email: { equals: String(email), mode: 'insensitive' } },
+    });
+    if (existing) {
+      res.status(409).json({ error: 'Conta com esse email ja existe' });
+      return;
+    }
+
+    const account = await prisma.emailAccount.create({
+      data: {
+        email: String(email),
+        displayName: displayName ? String(displayName) : null,
+        provider: 'IMAP',
+        accessToken: '',
+        imapHost: String(host),
+        imapPort: Number(port),
+        imapUser: String(user),
+        imapPasswordEnc: encryptSecret(String(password)),
+        imapTls: tls !== false,
+      },
+      select: { id: true, email: true, displayName: true, color: true, provider: true, createdAt: true },
+    });
+
+    res.json({ ...account, folders: test.folders });
+  } catch (error: any) {
+    console.error('Error creating IMAP account:', error);
+    res.status(500).json({ error: 'Failed to create IMAP account' });
   }
 });
 

@@ -53,10 +53,15 @@ model EmailAccount {
   displayName  String?
   color        String?
   provider     Provider
-  accessToken  String
+  accessToken  String    @default("")
   refreshToken String?
   tokenExpiry  DateTime?
   userId       String?
+  imapHost         String?
+  imapPort         Int?
+  imapUser         String?
+  imapPasswordEnc  String?
+  imapTls          Boolean @default(true)
   sortOrder    Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

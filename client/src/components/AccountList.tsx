@@ -15,10 +15,12 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   EyeOutlined,
+  MailOutlined,
 } from '@ant-design/icons';
 import type { EmailAccount, FoldersByAccount } from '../types';
 import { updateAccount, moveAccount } from '../api';
 import { COLOR_PALETTE } from '../constants/colorPalette';
+import AddImapModal from './AddImapModal';
 
 const { Text } = Typography;
 
@@ -41,6 +43,7 @@ const providerColors: Record<string, string> = {
 const providerIcons: Record<string, React.ReactNode> = {
   MICROSOFT: <WindowsOutlined />,
   GMAIL: <GoogleOutlined />,
+  IMAP: <MailOutlined />,
 };
 
 const folderIcons: Record<string, React.ReactNode> = {
@@ -111,6 +114,7 @@ function AccountList({
   const [editValue, setEditValue] = useState('');
   const editInputRef = useRef<InputRef>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
+  const [imapModalOpen, setImapModalOpen] = useState(false);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -392,6 +396,13 @@ function AccountList({
           Adicionar conta Microsoft
         </Button>
         <Button
+          icon={<MailOutlined />}
+          block
+          onClick={() => setImapModalOpen(true)}
+        >
+          Adicionar conta IMAP
+        </Button>
+        <Button
           icon={<GoogleOutlined />}
           block
           disabled
@@ -406,6 +417,12 @@ function AccountList({
           Gmail disponivel em breve
         </Text>
       </div>
+
+      <AddImapModal
+        open={imapModalOpen}
+        onClose={() => setImapModalOpen(false)}
+        onCreated={() => onAccountUpdated?.()}
+      />
 
       {menu && menuAccount && (
         <div

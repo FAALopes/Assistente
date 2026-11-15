@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { EmailCategory, RuleAction } from '@prisma/client';
 import { prisma } from '../index';
-import { fetchEmails, deleteEmail as graphDeleteEmail, moveEmailToInbox, getValidToken } from '../services/graphService';
+import { fetchEmails as mailFetchEmails, deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, type FolderKey } from '../services/mailService';
 import { learnFromAction } from '../services/ruleEngine';
 import { classifyJunkEmails, recordOverride, TriageActionType, TriageClassification } from '../services/triageService';
 
@@ -81,7 +81,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // Folders to sync for each Microsoft account
-const SYNC_FOLDERS = [
+const SYNC_FOLDERS: Array<{ graphName: FolderKey; label: string }> = [
   { graphName: 'inbox', label: 'Inbox' },
   { graphName: 'junkemail', label: 'E-mail de Lixo' },
 ];
@@ -90,7 +90,7 @@ const SYNC_FOLDERS = [
 router.post('/sync', async (_req: Request, res: Response) => {
   try {
     const accounts = await prisma.emailAccount.findMany({
-      where: { provider: 'MICROSOFT' },
+      where: { provider: { in: ['MICROSOFT', 'IMAP'] } },
     });
 
     if (accounts.length === 0) {
@@ -107,12 +107,11 @@ router.post('/sync', async (_req: Request, res: Response) => {
     for (const account of accounts) {
       try {
         console.log(`Syncing account: ${account.email}`);
-        const accessToken = await getValidToken(account.id);
 
         for (const folder of SYNC_FOLDERS) {
           try {
             console.log(`  Fetching folder: ${folder.label} (${folder.graphName})`);
-            const graphEmails = await fetchEmails(accessToken, folder.graphName);
+            const graphEmails = await mailFetchEmails(account.id, folder.graphName);
             console.log(`  Got ${graphEmails.length} emails from ${folder.label}`);
 
             // Collect all external IDs from the server for this folder
@@ -349,8 +348,7 @@ router.post('/bulk/delete', async (req: Request, res: Response) => {
     // Try to delete from Graph for each email
     for (const email of emails) {
       try {
-        const accessToken = await getValidToken(email.accountId);
-        await graphDeleteEmail(accessToken, email.externalId);
+        await mailDeleteEmail(email.accountId, email.externalId);
       } catch (graphError: any) {
         console.error(`Graph delete error for ${email.id}:`, graphError.message);
       }
@@ -385,8 +383,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     // Move to trash in Microsoft Graph
     try {
-      const accessToken = await getValidToken(email.accountId);
-      await graphDeleteEmail(accessToken, email.externalId);
+      await mailDeleteEmail(email.accountId, email.externalId);
     } catch (graphError: any) {
       console.error('Graph delete error (continuing with local delete):', graphError.message);
     }
@@ -418,8 +415,7 @@ router.post('/:id/move-to-inbox', async (req: Request, res: Response) => {
 
     // Move to inbox in Microsoft Graph
     try {
-      const accessToken = await getValidToken(email.accountId);
-      await moveEmailToInbox(accessToken, email.externalId);
+      await mailMoveToInbox(email.accountId, email.externalId);
     } catch (graphError: any) {
       console.error('Graph move error:', graphError.message);
       res.status(500).json({ error: 'Failed to move email in server' });
@@ -558,8 +554,7 @@ router.post('/triage/execute', async (req: Request, res: Response) => {
 
       for (const email of emails) {
         try {
-          const accessToken = await getValidToken(email.accountId);
-          await graphDeleteEmail(accessToken, email.externalId);
+          await mailDeleteEmail(email.accountId, email.externalId);
         } catch (err: any) {
           errors.push(`Delete failed for ${email.from}: ${err.message}`);
         }
@@ -577,8 +572,7 @@ router.post('/triage/execute', async (req: Request, res: Response) => {
 
       for (const email of emails) {
         try {
-          const accessToken = await getValidToken(email.accountId);
-          await moveEmailToInbox(accessToken, email.externalId);
+          await mailMoveToInbox(email.accountId, email.externalId);
           await prisma.email.update({
             where: { id: email.id },
             data: { folder: 'inbox' },
