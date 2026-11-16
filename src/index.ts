@@ -15,6 +15,7 @@ import diagnosticsRoutes from './routes/diagnostics';
 import configRoutes from './routes/config';
 import syncRoutes from './routes/sync';
 import { startAutoCleanup, runCleanup } from './services/autoCleanup';
+import { cleanupOrphanJobs } from './services/syncJob';
 import { requireAuth, requireAuthOrCronToken } from './middleware/auth';
 
 export const prisma = new PrismaClient();
@@ -111,4 +112,5 @@ process.on('SIGTERM', async () => {
 app.listen(PORT, () => {
   console.log(`Assistente backend running on port ${PORT}`);
   startAutoCleanup();
+  cleanupOrphanJobs().catch(e => console.error('[SyncJob] cleanup orphans failed:', e));
 });

@@ -19,7 +19,7 @@ import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
 import ConfigPanel from './components/ConfigPanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, cancelSyncJob, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
 import type {
   EmailAccount,
   Email,
@@ -44,6 +44,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string>('');
+  const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
@@ -128,19 +129,26 @@ function App() {
   const handleSync = async () => {
     setSyncing(true);
     setSyncStatus('A iniciar...');
+    const startedAt = Date.now();
     try {
       const { jobId } = await syncEmails();
+      setSyncJobId(jobId);
       // Poll every 1500ms
       while (true) {
         await new Promise(r => setTimeout(r, 1500));
         const job = await getSyncStatus(jobId);
         if (!job) break;
-        const pct = job.foldersTotal > 0 ? Math.min(100, Math.round((job.foldersDone / job.foldersTotal) * 100)) : 0;
-        setSyncStatus(`${pct}% - ${job.currentFolder || job.phase || ''} (${job.emailsSynced} emails)`);
-        if (job.status === 'done' || job.status === 'error') {
+        const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+        const elapsedStr = elapsedSec < 60 ? `${elapsedSec}s` : `${Math.floor(elapsedSec / 60)}m${elapsedSec % 60}s`;
+        const folderInfo = job.foldersTotal > 0 ? `${job.foldersDone}/${job.foldersTotal} pastas` : (job.phase || '');
+        const currentShort = job.currentFolder ? ` - ${job.currentFolder.split(' / ').pop()}` : '';
+        setSyncStatus(`${folderInfo} - ${job.emailsSynced} emails - ${elapsedStr}${currentShort}`);
+        if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
           if (job.status === 'done') {
             const removedTxt = job.emailsRemoved ? `, ${job.emailsRemoved} removidos` : '';
             message.success(`${job.emailsSynced} emails sincronizados${removedTxt}`);
+          } else if (job.status === 'cancelled') {
+            message.info(`Sync cancelada (${job.emailsSynced} emails processados antes)`);
           } else {
             message.error('Sync falhou');
           }
@@ -169,6 +177,17 @@ function App() {
     } finally {
       setSyncing(false);
       setSyncStatus('');
+      setSyncJobId(null);
+    }
+  };
+
+  const handleCancelSync = async () => {
+    if (!syncJobId) return;
+    try {
+      await cancelSyncJob(syncJobId);
+      message.info('A cancelar...');
+    } catch {
+      message.error('Nao foi possivel cancelar');
     }
   };
 
@@ -430,10 +449,19 @@ function App() {
               icon={<SyncOutlined spin={syncing} />}
               onClick={handleSync}
               loading={syncing}
+              disabled={syncing}
               title={syncStatus}
+              style={syncing ? { maxWidth: 420 } : undefined}
             >
-              {syncing && syncStatus ? syncStatus : 'Sincronizar'}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: syncing ? 360 : undefined, verticalAlign: 'bottom' }}>
+                {syncing && syncStatus ? syncStatus : 'Sincronizar'}
+              </span>
             </Button>
+            {syncing && syncJobId && (
+              <Button danger onClick={handleCancelSync}>
+                Cancelar
+              </Button>
+            )}
             <Button
               icon={<LogoutOutlined />}
               title="Terminar sessão"

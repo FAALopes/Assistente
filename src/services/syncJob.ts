@@ -17,6 +17,23 @@ interface JobState {
   foldersDone: number;
   emailsSynced: number;
   emailsRemoved: number;
+  cancelled?: boolean;
+}
+
+// In-memory registry of running jobs so /cancel can set a flag the worker reads
+const RUNNING_JOBS = new Map<string, JobState>();
+
+export async function cancelJob(jobId: string): Promise<boolean> {
+  const state = RUNNING_JOBS.get(jobId);
+  if (!state) return false;
+  state.cancelled = true;
+  return true;
+}
+
+async function checkCancelled(state: JobState): Promise<boolean> {
+  if (state.cancelled) return true;
+  // Also check DB in case flag was set by a different process (not our case here, but safe)
+  return false;
 }
 
 async function updateJob(jobId: string, patch: Record<string, any>): Promise<void> {
@@ -106,6 +123,7 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
   const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
   await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
   for (const folder of folders) {
+    if (await checkCancelled(state)) return;
     await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
     try {
       const row = await prisma.mailFolder.findUnique({
@@ -189,6 +207,7 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
   const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
   await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
   for (const folder of folders) {
+    if (await checkCancelled(state)) return;
     await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
     try {
       // IMAP has no delta — full fetch per folder (uses upsert so no dup)
@@ -225,10 +244,30 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
   }
 }
 
+/**
+ * Called once at server startup: any 'running' row is an orphan from a prior
+ * process (restart killed its worker). Mark them error so new jobs can start.
+ */
+export async function cleanupOrphanJobs(): Promise<number> {
+  const result = await prisma.syncJob.updateMany({
+    where: { status: 'running' },
+    data: { status: 'error', finishedAt: new Date(), errors: ['Orphan (server restarted during sync)'] as any },
+  });
+  if (result.count > 0) console.log(`[SyncJob] cleaned ${result.count} orphan running job(s)`);
+  return result.count;
+}
+
 export async function startSyncJob(accountId?: string): Promise<string> {
-  // Avoid duplicate concurrent jobs
+  // Only block if we actually have a worker in memory for that running job
   const running = await prisma.syncJob.findFirst({ where: { status: 'running' } });
-  if (running) return running.id;
+  if (running && RUNNING_JOBS.has(running.id)) return running.id;
+  // Running row with no in-memory worker = orphan; mark as error and continue
+  if (running) {
+    await prisma.syncJob.update({
+      where: { id: running.id },
+      data: { status: 'error', finishedAt: new Date(), errors: ['Orphan (no worker)'] as any },
+    });
+  }
 
   const job = await prisma.syncJob.create({
     data: { status: 'running', phase: 'folders', accountId: accountId || null },
@@ -242,6 +281,8 @@ export async function startSyncJob(accountId?: string): Promise<string> {
     emailsRemoved: 0,
   };
 
+  RUNNING_JOBS.set(job.id, state);
+
   // Fire-and-forget
   (async () => {
     try {
@@ -251,12 +292,12 @@ export async function startSyncJob(accountId?: string): Promise<string> {
           : { provider: { in: ['MICROSOFT', 'IMAP'] } },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       });
-      // Prefer Microsoft first (faster via delta sync); IMAP is heavier so goes last
       accounts.sort((a, b) => {
         const score = (p: string) => (p === 'MICROSOFT' ? 0 : 1);
         return score(a.provider) - score(b.provider);
       });
       for (const acc of accounts) {
+        if (state.cancelled) break;
         try {
           if (acc.provider === 'MICROSOFT') {
             await syncMicrosoftAccount(state, acc.id, acc.email);
@@ -268,13 +309,13 @@ export async function startSyncJob(accountId?: string): Promise<string> {
         }
       }
       await updateJob(job.id, {
-        status: 'done',
+        status: state.cancelled ? 'cancelled' : 'done',
         phase: 'cleanup',
         currentFolder: null,
         finishedAt: new Date(),
         errors: state.errors.length > 0 ? state.errors.slice(0, 50) : null,
       });
-      console.log(`[SyncJob ${job.id}] done: ${state.emailsSynced} synced, ${state.emailsRemoved} removed, ${state.errors.length} errors`);
+      console.log(`[SyncJob ${job.id}] ${state.cancelled ? 'cancelled' : 'done'}: ${state.emailsSynced} synced, ${state.emailsRemoved} removed, ${state.errors.length} errors`);
     } catch (e: any) {
       console.error(`[SyncJob ${job.id}] fatal:`, e);
       await updateJob(job.id, {
@@ -282,6 +323,8 @@ export async function startSyncJob(accountId?: string): Promise<string> {
         finishedAt: new Date(),
         errors: [e.message, ...state.errors].slice(0, 50),
       });
+    } finally {
+      RUNNING_JOBS.delete(job.id);
     }
   })();
 

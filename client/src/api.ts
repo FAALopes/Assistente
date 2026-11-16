@@ -126,6 +126,15 @@ export async function getLatestSyncJob(): Promise<import('./types').SyncJob | nu
   return data;
 }
 
+export async function cancelSyncJob(jobId: string): Promise<void> {
+  await api.post(`/api/sync/cancel/${jobId}`);
+}
+
+export async function resetStuckJobs(): Promise<{ reset: number }> {
+  const { data } = await api.post<{ reset: number }>('/api/sync/reset-stuck');
+  return data;
+}
+
 export async function updateCategory(
   id: string,
   category: EmailCategory,

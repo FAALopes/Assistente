@@ -55,7 +55,7 @@ export type FoldersByAccount = Record<string, EmailFolder[]>;
 
 export interface SyncJob {
   id: string;
-  status: 'queued' | 'running' | 'done' | 'error';
+  status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
   phase: string | null;
   currentFolder: string | null;
   foldersTotal: number;
