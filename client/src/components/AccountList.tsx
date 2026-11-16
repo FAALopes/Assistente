@@ -16,6 +16,8 @@ import {
   EyeOutlined,
   MailOutlined,
   SyncOutlined,
+  CaretRightOutlined,
+  CaretDownOutlined,
 } from '@ant-design/icons';
 import type { EmailAccount, FoldersByAccount } from '../types';
 import { updateAccount, moveAccount } from '../api';
@@ -83,6 +85,7 @@ interface ContextMenuState {
 }
 
 const COLLAPSED_KEY = 'assistente.collapsedAccounts';
+const EXPANDED_FOLDERS_KEY = 'assistente.expandedFolders';
 
 function loadCollapsed(): Set<string> {
   try {
@@ -98,6 +101,107 @@ function saveCollapsed(s: Set<string>): void {
   try {
     localStorage.setItem(COLLAPSED_KEY, JSON.stringify(Array.from(s)));
   } catch { /* storage unavailable */ }
+}
+
+function loadExpandedFolders(): Set<string> {
+  try {
+    const raw = localStorage.getItem(EXPANDED_FOLDERS_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveExpandedFolders(s: Set<string>): void {
+  try {
+    localStorage.setItem(EXPANDED_FOLDERS_KEY, JSON.stringify(Array.from(s)));
+  } catch { /* storage unavailable */ }
+}
+
+function renderFolderTree(
+  folders: Array<{ id: string; label: string; count: number; parentId?: string | null; wellKnownName?: string | null; depth?: number }>,
+  accountId: string,
+  parentId: string | null,
+  expanded: Set<string>,
+  selectedAccountId: string | undefined,
+  selectedFolder: string | undefined,
+  toggleExpand: (accountId: string, folderId: string) => void,
+  onSelectFolder: (folderId: string) => void,
+  level = 0,
+): React.ReactNode {
+  const children = folders.filter(f => (f.parentId || null) === parentId);
+  if (children.length === 0) return null;
+  // Sort: wellKnown folders first in canonical order, then alphabetical
+  const wellKnownOrder = ['inbox', 'drafts', 'sentitems', 'junkemail', 'archive', 'deleteditems', 'outbox'];
+  const wkIdx = (wk: string | null | undefined) => {
+    const i = wellKnownOrder.indexOf(wk || '');
+    return i === -1 ? 99 : i;
+  };
+  children.sort((a, b) => {
+    const ia = wkIdx(a.wellKnownName), ib = wkIdx(b.wellKnownName);
+    if (ia !== ib) return ia - ib;
+    return a.label.localeCompare(b.label, 'pt');
+  });
+  return (
+    <>
+      {children.map(folder => {
+        const hasChildren = folders.some(f => f.parentId === folder.id);
+        const key = `${accountId}:${folder.id}`;
+        const isExpanded = expanded.has(key);
+        const isSelected = selectedAccountId === accountId && selectedFolder === folder.id;
+        const wk = folder.wellKnownName || folder.id;
+        const icon = folderIcons[wk] || <FolderOutlined />;
+        const color = folderColors[wk] || '#8c8c8c';
+        return (
+          <div key={folder.id}>
+            <div
+              style={{
+                padding: '4px 6px',
+                paddingLeft: 6 + level * 14,
+                cursor: 'pointer',
+                borderRadius: 6,
+                background: isSelected ? '#e6f4ff' : 'transparent',
+                border: isSelected ? '1px solid #91caff' : '1px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = '#f5f5f5'; }}
+              onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+              onClick={(e) => { e.stopPropagation(); onSelectFolder(folder.id); }}
+              title={folder.label}
+            >
+              <Space size={2} style={{ minWidth: 0, flex: 1 }}>
+                <span
+                  onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(accountId, folder.id); }}
+                  style={{
+                    width: 14,
+                    display: 'inline-flex',
+                    justifyContent: 'center',
+                    color: hasChildren ? '#8c8c8c' : 'transparent',
+                    cursor: hasChildren ? 'pointer' : 'default',
+                    fontSize: 10,
+                  }}
+                >
+                  {hasChildren ? (isExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />) : null}
+                </span>
+                <span style={{ color, fontSize: 13 }}>{icon}</span>
+                <Text style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {folder.label}
+                </Text>
+              </Space>
+              <Text type="secondary" style={{ fontSize: 11 }}>{folder.count}</Text>
+            </div>
+            {hasChildren && isExpanded && renderFolderTree(
+              folders, accountId, folder.id, expanded, selectedAccountId, selectedFolder, toggleExpand, onSelectFolder, level + 1,
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
 }
 
 function AccountList({
@@ -116,6 +220,7 @@ function AccountList({
   const [editValue, setEditValue] = useState('');
   const editInputRef = useRef<InputRef>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => loadExpandedFolders());
   const [imapModalOpen, setImapModalOpen] = useState(false);
   const [gmailModalOpen, setGmailModalOpen] = useState(false);
 
@@ -142,6 +247,16 @@ function AccountList({
       const next = new Set(prev);
       if (next.has(accountId)) next.delete(accountId); else next.add(accountId);
       saveCollapsed(next);
+      return next;
+    });
+  };
+
+  const toggleFolderExpand = (accountId: string, folderId: string) => {
+    const key = `${accountId}:${folderId}`;
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      saveExpandedFolders(next);
       return next;
     });
   };
@@ -343,71 +458,26 @@ function AccountList({
               </div>
 
               {!isCollapsed && (
-                <div style={{ paddingLeft: 20, marginTop: 2 }}>
-                  {folders.map((folder) => {
-                    const isFolderSelected =
-                      selectedAccountId === account.id && selectedFolder === folder.id;
-                    const wk = folder.wellKnownName || folder.id;
-                    const icon = folderIcons[wk] || <FolderOutlined />;
-                    const color = folderColors[wk] || '#8c8c8c';
-                    const depth = folder.depth ?? 0;
-
-                    return (
-                      <div
-                        key={folder.id}
-                        style={{
-                          padding: '4px 10px',
-                          paddingLeft: 10 + depth * 14,
-                          cursor: 'pointer',
-                          borderRadius: 6,
-                          background: isFolderSelected ? '#e6f4ff' : 'transparent',
-                          border: isFolderSelected ? '1px solid #91caff' : '1px solid transparent',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          transition: 'background 0.2s',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isFolderSelected) {
-                            (e.currentTarget as HTMLDivElement).style.background = '#f5f5f5';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isFolderSelected) {
-                            (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                          }
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isFolderSelected) {
-                            onSelectFolder(undefined);
-                            onSelectAccount(account.id);
-                          } else {
-                            onSelectAccount(account.id);
-                            onSelectFolder(folder.id);
-                          }
-                        }}
-                        title={folder.path || folder.label}
-                      >
-                        <Space size={6} style={{ minWidth: 0, flex: 1 }}>
-                          <span style={{ color, fontSize: 13 }}>{icon}</span>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {folder.label}
-                          </Text>
-                        </Space>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                          {folder.count}
-                        </Text>
-                      </div>
-                    );
-                  })}
+                <div style={{ paddingLeft: 8, marginTop: 2 }}>
+                  {renderFolderTree(
+                    folders,
+                    account.id,
+                    null,
+                    expandedFolders,
+                    selectedAccountId,
+                    selectedFolder,
+                    toggleFolderExpand,
+                    (folderId) => {
+                      const isSel = selectedAccountId === account.id && selectedFolder === folderId;
+                      if (isSel) {
+                        onSelectFolder(undefined);
+                        onSelectAccount(account.id);
+                      } else {
+                        onSelectAccount(account.id);
+                        onSelectFolder(folderId);
+                      }
+                    },
+                  )}
                 </div>
               )}
             </div>
