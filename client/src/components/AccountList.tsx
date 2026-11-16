@@ -377,8 +377,11 @@ function AccountList({
           const isEditing = editingId === account.id;
           const isCollapsed = collapsed.has(account.id);
           const folders = foldersByAccount[account.id] || [];
-          const inboxCount = folders.find(f => (f.wellKnownName || f.id) === 'inbox')?.count ?? 0;
+          const inboxFolder = folders.find(f => (f.wellKnownName || f.id) === 'inbox');
+          const inboxCount = inboxFolder?.count ?? 0;
+          const inboxUnread = inboxFolder?.unreadCount ?? 0;
           const totalCount = account._count?.emails ?? 0;
+          const totalUnread = folders.reduce((sum, f) => sum + (f.unreadCount || 0), 0);
 
           return (
             <div key={account.id} style={{ marginBottom: 8 }}>
@@ -464,15 +467,21 @@ function AccountList({
                     >
                       <InboxOutlined style={{ marginRight: 4 }} />
                       {inboxCount}
+                      {inboxUnread > 0 && (
+                        <span style={{ marginLeft: 4, fontWeight: 700 }}>({inboxUnread})</span>
+                      )}
                     </Tag>
                   )}
                   {totalCount > 0 && (
                     <Tag
                       color="default"
                       style={{ fontSize: 14, margin: 0, padding: '2px 8px', fontWeight: 600 }}
-                      title="Total"
+                      title="Total (nao lidos)"
                     >
                       {totalCount}
+                      {totalUnread > 0 && (
+                        <span style={{ marginLeft: 4, color: '#1677ff', fontWeight: 700 }}>({totalUnread})</span>
+                      )}
                     </Tag>
                   )}
                 </Space>
