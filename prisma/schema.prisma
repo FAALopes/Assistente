@@ -64,6 +64,8 @@ model EmailAccount {
   imapTls          Boolean @default(true)
   sortOrder    Int       @default(0)
   globalDeltaLink  String?  // Microsoft Graph /me/messages/delta link
+  autoSyncMinutes Int?     // null = off; otherwise minimum minutes between auto syncs
+  lastSyncAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   emails       Email[]

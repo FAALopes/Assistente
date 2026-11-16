@@ -360,6 +360,10 @@ export async function startSyncJob(accountId?: string): Promise<string> {
           } else if (acc.provider === 'IMAP') {
             await syncImapAccount(state, acc.id, acc.email);
           }
+          await prisma.emailAccount.update({
+            where: { id: acc.id },
+            data: { lastSyncAt: new Date() },
+          });
         } catch (e: any) {
           state.errors.push(`${acc.email}: ${e.message}`);
         }

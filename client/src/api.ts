@@ -66,7 +66,7 @@ export async function getAccounts(): Promise<EmailAccount[]> {
 
 export async function updateAccount(
   id: string,
-  updates: { displayName?: string | null; color?: string | null },
+  updates: { displayName?: string | null; color?: string | null; autoSyncMinutes?: number | null },
 ): Promise<EmailAccount> {
   const { data } = await api.patch<EmailAccount>(`/auth/accounts/${id}`, updates);
   return data;

@@ -296,6 +296,20 @@ function AccountList({
     }
   };
 
+  const [autoSyncDraft, setAutoSyncDraft] = useState<string>('');
+
+  const saveAutoSync = async (accountId: string) => {
+    const n = autoSyncDraft.trim() === '' ? null : Number(autoSyncDraft);
+    setMenu(null);
+    try {
+      await updateAccount(accountId, { autoSyncMinutes: n });
+      message.success(n ? `Auto-sync: ${n} min` : 'Auto-sync desligado');
+      onAccountUpdated?.();
+    } catch {
+      message.error('Erro ao gravar');
+    }
+  };
+
   const doMove = async (accountId: string, direction: 'up' | 'down') => {
     setMenu(null);
     try {
@@ -687,6 +701,48 @@ function AccountList({
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
               <BgColorsOutlined /> Cor de fundo
+            </div>
+          </Popover>
+          <Popover
+            trigger="click"
+            placement="right"
+            onOpenChange={(v) => { if (v) setAutoSyncDraft(menuAccount.autoSyncMinutes ? String(menuAccount.autoSyncMinutes) : ''); }}
+            content={
+              <div style={{ width: 200 }}>
+                <div style={{ fontSize: 12, marginBottom: 6, color: '#8c8c8c' }}>
+                  Sincronizar automaticamente de X em X minutos (vazio = desligado)
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="min"
+                  value={autoSyncDraft}
+                  onChange={(e) => setAutoSyncDraft(e.target.value)}
+                  onPressEnter={() => saveAutoSync(menuAccount.id)}
+                  suffix="min"
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <Button size="small" type="primary" onClick={() => saveAutoSync(menuAccount.id)}>
+                    Gravar
+                  </Button>
+                </div>
+              </div>
+            }
+          >
+            <div
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <SyncOutlined /> Auto-sync{menuAccount.autoSyncMinutes ? ` (${menuAccount.autoSyncMinutes} min)` : ' (off)'}
             </div>
           </Popover>
         </div>

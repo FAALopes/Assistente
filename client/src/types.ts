@@ -14,6 +14,8 @@ export interface EmailAccount {
   displayName: string | null;
   color?: string | null;
   sortOrder?: number;
+  autoSyncMinutes?: number | null;
+  lastSyncAt?: string | null;
   createdAt: string;
   _count?: { emails: number };
 }

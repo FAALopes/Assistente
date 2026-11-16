@@ -127,6 +127,27 @@ function App() {
     fetchEmails();
   }, [fetchEmails]);
 
+  // Auto-sync tick: every 60s, if tab is visible and some account is due, trigger per-account sync
+  useEffect(() => {
+    const tick = async () => {
+      if (document.hidden) return;
+      if (syncing) return;
+      const now = Date.now();
+      for (const acc of accounts) {
+        if (!acc.autoSyncMinutes) continue;
+        const last = acc.lastSyncAt ? new Date(acc.lastSyncAt).getTime() : 0;
+        if (now - last >= acc.autoSyncMinutes * 60_000) {
+          handleSync(acc.id);
+          return; // one at a time
+        }
+      }
+    };
+    const id = setInterval(tick, 60_000);
+    tick();
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, syncing]);
+
   const handleSync = async (accountId?: string) => {
     if (syncing) return;
     setSyncing(true);

@@ -226,6 +226,8 @@ router.get('/accounts', async (_req: Request, res: Response) => {
         color: true,
         provider: true,
         sortOrder: true,
+        autoSyncMinutes: true,
+        lastSyncAt: true,
         createdAt: true,
         _count: { select: { emails: true } },
       },
@@ -289,7 +291,7 @@ router.post('/accounts/:id/move', async (req: Request, res: Response) => {
 router.patch('/accounts/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const { displayName, color } = req.body;
+    const { displayName, color, autoSyncMinutes } = req.body;
 
     const account = await prisma.emailAccount.findUnique({ where: { id } });
     if (!account) {
@@ -297,13 +299,17 @@ router.patch('/accounts/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const data: { displayName?: string | null; color?: string | null } = {};
+    const data: { displayName?: string | null; color?: string | null; autoSyncMinutes?: number | null } = {};
     if (displayName !== undefined) {
       const trimmed = typeof displayName === 'string' ? displayName.trim() : '';
       data.displayName = trimmed.length > 0 ? trimmed : null;
     }
     if (color !== undefined) {
       data.color = color || null;
+    }
+    if (autoSyncMinutes !== undefined) {
+      const n = Number(autoSyncMinutes);
+      data.autoSyncMinutes = Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
     }
 
     const updated = await prisma.emailAccount.update({
@@ -315,6 +321,8 @@ router.patch('/accounts/:id', async (req: Request, res: Response) => {
         displayName: true,
         color: true,
         provider: true,
+        autoSyncMinutes: true,
+        lastSyncAt: true,
         createdAt: true,
         _count: { select: { emails: true } },
       },
