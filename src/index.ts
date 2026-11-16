@@ -3,6 +3,8 @@ import 'isomorphic-fetch';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
+import { Pool } from 'pg';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
@@ -29,15 +31,27 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
 }));
+const PgSession = connectPgSimple(session);
+const sessionPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 2,
+});
 app.use(session({
+  store: new PgSession({
+    pool: sessionPool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 60, // seconds — prune expired every hour
+  }),
   secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
   resave: false,
   saveUninitialized: false,
+  rolling: true, // reset expiry on each request
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   },
 }));
 
