@@ -2,7 +2,7 @@ import { prisma } from '../index';
 import {
   getValidToken,
   listAllMailFoldersFlat,
-  fetchAccountDelta,
+  fetchFolderDelta,
   type FlatFolder,
 } from './graphService';
 import {
@@ -108,50 +108,54 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
     await prisma.mailFolder.deleteMany({ where: { accountId, id: { in: toDrop } } });
   }
 
-  // 2) Account-wide delta: ONE stream for all folders instead of iterating each
+  // 2) Per-folder delta sync, in PARALLEL batches (Graph doesn't support account-wide delta)
   const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
-  await updateJob(state.jobId, {
-    phase: 'emails',
-    foldersTotal: (prev?.foldersTotal || 0) + 1,  // treat whole account as 1 "folder" for progress
-    currentFolder: `${accountEmail} (delta global)`,
-  });
+  await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
 
-  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId }, select: { globalDeltaLink: true } });
-  try {
-    const { deltaLink } = await fetchAccountDelta(
-      token,
-      acc?.globalDeltaLink || null,
-      async (items, _total) => {
-        if (await checkCancelled(state)) return;
-        const changed = items.filter(i => !i.removed);
-        const removed = items.filter(i => i.removed).map(i => i.id);
-        for (const em of changed) {
-          try {
-            await upsertEmail(accountId, em.parentFolderId || 'inbox', em as any);
-            state.emailsSynced++;
-          } catch (e: any) {
-            state.errors.push(`${accountEmail}: upsert ${em.id}: ${e.message}`);
+  const CONCURRENCY = 6;
+  const syncOneFolder = async (folder: FlatFolder) => {
+    if (await checkCancelled(state)) return;
+    try {
+      const row = await prisma.mailFolder.findUnique({
+        where: { accountId_id: { accountId, id: folder.id } },
+        select: { deltaLink: true },
+      });
+      const { deltaLink } = await fetchFolderDelta(
+        token,
+        folder.id,
+        row?.deltaLink || null,
+        async (changed, deleted, _total) => {
+          for (const em of changed) {
+            try { await upsertEmail(accountId, folder.id, em); state.emailsSynced++; }
+            catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
           }
-        }
-        if (removed.length > 0) {
-          const res = await prisma.email.deleteMany({ where: { externalId: { in: removed } } });
-          state.emailsRemoved += res.count;
-        }
-        await updateJob(state.jobId, {
-          emailsSynced: state.emailsSynced,
-          emailsRemoved: state.emailsRemoved,
-        });
-      },
-    );
-    await prisma.emailAccount.update({
-      where: { id: accountId },
-      data: { globalDeltaLink: deltaLink },
+          if (deleted.length > 0) {
+            const res = await prisma.email.deleteMany({ where: { externalId: { in: deleted } } });
+            state.emailsRemoved += res.count;
+          }
+        },
+      );
+      await prisma.mailFolder.update({
+        where: { accountId_id: { accountId, id: folder.id } },
+        data: { deltaLink, lastSyncAt: new Date() },
+      });
+    } catch (e: any) {
+      state.errors.push(`${accountEmail} / ${folder.path}: ${e.message}`);
+    }
+    state.foldersDone++;
+    await updateJob(state.jobId, {
+      foldersDone: state.foldersDone,
+      emailsSynced: state.emailsSynced,
+      emailsRemoved: state.emailsRemoved,
+      currentFolder: `${accountEmail} / ${folder.path}`,
     });
-  } catch (e: any) {
-    state.errors.push(`${accountEmail}: account delta failed: ${e.message}`);
+  };
+
+  for (let i = 0; i < folders.length; i += CONCURRENCY) {
+    if (await checkCancelled(state)) return;
+    const batch = folders.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(syncOneFolder));
   }
-  state.foldersDone++;
-  await updateJob(state.jobId, { foldersDone: state.foldersDone });
 }
 
 async function syncImapAccount(state: JobState, accountId: string, accountEmail: string): Promise<void> {
