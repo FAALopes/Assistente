@@ -177,32 +177,33 @@ function EmailList({
     return {};
   };
 
+  const actionsColumn = {
+    title: '',
+    key: 'actions',
+    width: 36,
+    render: (_: unknown, record: Email) => (
+      <Popconfirm
+        title="Apagar este email?"
+        description="O email será movido para o lixo no servidor."
+        onConfirm={() => onDelete?.(record.id)}
+        okText="Apagar"
+        cancelText="Cancelar"
+        okButtonProps={{ danger: true }}
+      >
+        <Button
+          type="text"
+          size="small"
+          icon={<DeleteOutlined />}
+          danger
+          style={{ opacity: 0.4 }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+        />
+      </Popconfirm>
+    ),
+  };
+
   const columns: ColumnsType<Email> = [
-    {
-      title: '',
-      key: 'actions',
-      width: 36,
-      render: (_: unknown, record: Email) => (
-        <Popconfirm
-          title="Apagar este email?"
-          description="O email será movido para o lixo no servidor."
-          onConfirm={() => onDelete?.(record.id)}
-          okText="Apagar"
-          cancelText="Cancelar"
-          okButtonProps={{ danger: true }}
-        >
-          <Button
-            type="text"
-            size="small"
-            icon={<DeleteOutlined />}
-            danger
-            style={{ opacity: 0.4 }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
-          />
-        </Popconfirm>
-      ),
-    },
     {
       title: 'De',
       dataIndex: 'from',
@@ -332,6 +333,7 @@ function EmailList({
         return <span style={{ fontSize: 12 }}>{account.email}</span>;
       },
     },
+    actionsColumn,
   ];
 
   const categoryOptions = Object.values(EmailCategory).map((cat) => ({
