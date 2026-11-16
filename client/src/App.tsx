@@ -19,7 +19,7 @@ import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
 import ConfigPanel from './components/ConfigPanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, cancelSyncJob, getSuggestions, deleteEmail, moveEmailToInbox, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, cancelSyncJob, getSuggestions, deleteEmail, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
 import type {
   EmailAccount,
   Email,
@@ -265,17 +265,6 @@ function App() {
     }
   };
 
-  const handleMoveToInbox = async (id: string) => {
-    try {
-      await moveEmailToInbox(id);
-      message.success('Email movido para Inbox');
-      fetchEmails();
-      fetchFolders();
-    } catch {
-      message.error('Erro ao mover email');
-    }
-  };
-
   // Feature 3: Rule preview
   const handlePreviewRules = async () => {
     setRulePreviewLoading(true);
@@ -515,9 +504,9 @@ function App() {
                     setFilters((prev) => ({ ...prev, page, limit }))
                   }
                   onDelete={handleDeleteEmail}
-                  onMoveToInbox={handleMoveToInbox}
                   onSelectEmail={setPreviewEmail}
                   selectedEmailId={previewEmail?.id || null}
+                  onRefresh={fetchEmails}
                 />
               </Spin>
             </div>

@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Table, Tag, Input, Select, Space, Badge, Button, Popconfirm, message } from 'antd';
+import { Table, Tag, Input, Select, Space, Button, Popconfirm, message } from 'antd';
 import {
   SearchOutlined,
-  WindowsOutlined,
-  GoogleOutlined,
   DeleteOutlined,
-  InboxOutlined,
   ThunderboltOutlined,
   PlusOutlined,
   EditOutlined,
 } from '@ant-design/icons';
-import { matchEmailAction } from '../api';
+import { matchEmailAction, updateCategory } from '../api';
 import DefineActionModal from './DefineActionModal';
 import type { EmailAction } from '../types';
 import type { ColumnsType } from 'antd/es/table';
@@ -35,9 +32,9 @@ interface EmailListProps {
   onFilterChange: (filters: Partial<EmailFilters>) => void;
   onPageChange: (page: number, limit: number) => void;
   onDelete?: (id: string) => void;
-  onMoveToInbox?: (id: string) => void;
   onSelectEmail?: (email: Email | null) => void;
   selectedEmailId?: string | null;
+  onRefresh?: () => void;
 }
 
 const categoryLabels: Record<EmailCategory, string> = {
@@ -56,11 +53,6 @@ const categoryColors: Record<EmailCategory, string> = {
   [EmailCategory.SAVE_LATER]: 'green',
   [EmailCategory.SAVE_ONEDRIVE]: 'cyan',
   [EmailCategory.UNCATEGORIZED]: 'default',
-};
-
-const providerIcons: Record<string, React.ReactNode> = {
-  MICROSOFT: <WindowsOutlined style={{ color: '#0078d4' }} />,
-  GMAIL: <GoogleOutlined style={{ color: '#ea4335' }} />,
 };
 
 const folderLabels: Record<string, string> = {
@@ -84,15 +76,25 @@ function EmailList({
   onFilterChange,
   onPageChange,
   onDelete,
-  onMoveToInbox,
   onSelectEmail,
   selectedEmailId,
+  onRefresh,
 }: EmailListProps) {
   const suggestionMap = new Map(
     suggestions.map((s) => [s.emailId, s]),
   );
 
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
+  const folderMap = new Map(folders.map((f) => [f.id, f]));
+
+  const handleCategoryChange = async (id: string, cat: EmailCategory) => {
+    try {
+      await updateCategory(id, cat);
+      onRefresh?.();
+    } catch {
+      message.error('Erro ao mudar categoria');
+    }
+  };
 
   const [ctxMenu, setCtxMenu] = useState<{ email: Email; x: number; y: number } | null>(null);
   const [matchedAction, setMatchedAction] = useState<EmailAction | null>(null);
@@ -179,56 +181,27 @@ function EmailList({
     {
       title: '',
       key: 'actions',
-      width: 64,
+      width: 36,
       render: (_: unknown, record: Email) => (
-        <Space size={0}>
-          <Popconfirm
-            title="Apagar este email?"
-            description="O email será movido para o lixo no servidor."
-            onConfirm={() => onDelete?.(record.id)}
-            okText="Apagar"
-            cancelText="Cancelar"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<DeleteOutlined />}
-              danger
-              style={{ opacity: 0.4 }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
-            />
-          </Popconfirm>
-          {record.folder !== 'inbox' && (
-            <Popconfirm
-              title="Mover para Inbox?"
-              onConfirm={() => onMoveToInbox?.(record.id)}
-              okText="Mover"
-              cancelText="Cancelar"
-            >
-              <Button
-                type="text"
-                size="small"
-                icon={<InboxOutlined />}
-                style={{ opacity: 0.4, color: '#1677ff' }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
-              />
-            </Popconfirm>
-          )}
-        </Space>
+        <Popconfirm
+          title="Apagar este email?"
+          description="O email será movido para o lixo no servidor."
+          onConfirm={() => onDelete?.(record.id)}
+          okText="Apagar"
+          cancelText="Cancelar"
+          okButtonProps={{ danger: true }}
+        >
+          <Button
+            type="text"
+            size="small"
+            icon={<DeleteOutlined />}
+            danger
+            style={{ opacity: 0.4 }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+          />
+        </Popconfirm>
       ),
-    },
-    {
-      title: '',
-      dataIndex: 'accountId',
-      key: 'provider',
-      width: 32,
-      render: (accountId: string) => {
-        const account = accountMap.get(accountId);
-        return account ? providerIcons[account.provider] : null;
-      },
     },
     {
       title: 'De',
@@ -285,18 +258,31 @@ function EmailList({
       title: 'Categoria',
       dataIndex: 'category',
       key: 'category',
-      width: 130,
-      render: (category: EmailCategory) => (
-        <Tag color={categoryColors[category]}>
-          {categoryLabels[category]}
-        </Tag>
+      width: 160,
+      render: (category: EmailCategory, record: Email) => (
+        <Select
+          size="small"
+          variant="borderless"
+          value={category}
+          style={{ width: '100%' }}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(val) => handleCategoryChange(record.id, val as EmailCategory)}
+          options={Object.values(EmailCategory).map((cat) => ({
+            value: cat,
+            label: (
+              <Tag color={categoryColors[cat]} style={{ margin: 0 }}>
+                {categoryLabels[cat]}
+              </Tag>
+            ),
+          }))}
+        />
       ),
     },
     {
-      title: 'Data',
+      title: 'Data Receb',
       dataIndex: 'receivedAt',
       key: 'receivedAt',
-      width: 150,
+      width: 130,
       sorter: true,
       sortOrder: filters.sortField === 'receivedAt' ? filters.sortOrder : undefined,
       defaultSortOrder: !filters.sortField ? 'descend' as const : undefined,
@@ -313,7 +299,8 @@ function EmailList({
       title: 'Pasta',
       dataIndex: 'folder',
       key: 'folder',
-      width: 140,
+      width: 160,
+      ellipsis: true,
       render: (folder: string) => {
         const colorMap: Record<string, string> = {
           inbox: 'blue',
@@ -323,9 +310,12 @@ function EmailList({
           deleteditems: 'default',
           archive: 'purple',
         };
+        const f = folderMap.get(folder);
+        const wk = f?.wellKnownName || folder;
+        const label = f?.label || folderLabels[folder] || folder;
         return (
-          <Tag color={colorMap[folder] || 'default'}>
-            {folderLabels[folder] || folder}
+          <Tag color={colorMap[wk] || 'default'} style={{ maxWidth: '100%' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
           </Tag>
         );
       },
@@ -334,19 +324,12 @@ function EmailList({
       title: 'Conta',
       dataIndex: 'accountId',
       key: 'account',
-      width: 160,
+      width: 180,
       ellipsis: true,
       render: (accountId: string) => {
         const account = accountMap.get(accountId);
         if (!account) return '-';
-        return (
-          <Badge
-            color={account.provider === 'MICROSOFT' ? '#0078d4' : '#ea4335'}
-            text={
-              <span style={{ fontSize: 12 }}>{account.email}</span>
-            }
-          />
-        );
+        return <span style={{ fontSize: 12 }}>{account.email}</span>;
       },
     },
   ];
