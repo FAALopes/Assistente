@@ -45,6 +45,7 @@ export interface EmailFolder {
   id: string;
   label: string;
   count: number;
+  unreadCount?: number;
   path?: string;
   depth?: number;
   wellKnownName?: string | null;

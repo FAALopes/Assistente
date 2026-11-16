@@ -120,7 +120,7 @@ function saveExpandedFolders(s: Set<string>): void {
 }
 
 function renderFolderTree(
-  folders: Array<{ id: string; label: string; count: number; parentId?: string | null; wellKnownName?: string | null; depth?: number }>,
+  folders: Array<{ id: string; label: string; count: number; unreadCount?: number; parentId?: string | null; wellKnownName?: string | null; depth?: number }>,
   accountId: string,
   parentId: string | null,
   expanded: Set<string>,
@@ -192,7 +192,14 @@ function renderFolderTree(
                   {folder.label}
                 </Text>
               </Space>
-              <Text type="secondary" style={{ fontSize: 11 }}>{folder.count}</Text>
+              <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                {folder.count}
+                {folder.unreadCount ? (
+                  <span style={{ color: '#1677ff', fontWeight: 600, marginLeft: 4 }}>
+                    ({folder.unreadCount})
+                  </span>
+                ) : null}
+              </Text>
             </div>
             {hasChildren && isExpanded && renderFolderTree(
               folders, accountId, folder.id, expanded, selectedAccountId, selectedFolder, toggleExpand, onSelectFolder, level + 1,

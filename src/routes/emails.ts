@@ -106,13 +106,20 @@ router.get('/folders', async (req: Request, res: Response) => {
       orderBy: [{ path: 'asc' }],
     });
 
-    // Group email counts by account + folder
+    // Group email counts by account + folder (total + unread)
     const counts = await prisma.email.groupBy({
       by: ['accountId', 'folder'],
       _count: { id: true },
     });
+    const unreadCounts = await prisma.email.groupBy({
+      by: ['accountId', 'folder'],
+      where: { isRead: false },
+      _count: { id: true },
+    });
     const countMap: Record<string, number> = {};
+    const unreadMap: Record<string, number> = {};
     for (const c of counts) countMap[`${c.accountId}:${c.folder}`] = c._count.id;
+    for (const c of unreadCounts) unreadMap[`${c.accountId}:${c.folder}`] = c._count.id;
 
     const toRow = (f: typeof mailFolders[number]) => ({
       id: f.id,
@@ -122,6 +129,7 @@ router.get('/folders', async (req: Request, res: Response) => {
       wellKnownName: f.wellKnownName,
       parentId: f.parentId,
       count: countMap[`${f.accountId}:${f.id}`] || 0,
+      unreadCount: unreadMap[`${f.accountId}:${f.id}`] || 0,
     });
 
     if (account && typeof account === 'string') {
