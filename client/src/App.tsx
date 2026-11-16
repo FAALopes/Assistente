@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Layout, Button, Typography, Space, message, Spin, Modal } from 'antd';
+import { Layout, Button, Typography, Space, message, Spin, Modal, Progress } from 'antd';
 import {
   SyncOutlined,
   SettingOutlined,
@@ -43,7 +43,8 @@ function App() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<string>('');
+  const [syncJob, setSyncJob] = useState<import('./types').SyncJob | null>(null);
+  const [syncStartedAt, setSyncStartedAt] = useState<number>(0);
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -129,8 +130,8 @@ function App() {
   const handleSync = async (accountId?: string) => {
     if (syncing) return;
     setSyncing(true);
-    setSyncStatus('A iniciar...');
-    const startedAt = Date.now();
+    setSyncStartedAt(Date.now());
+    setSyncJob(null);
     try {
       const { jobId } = await syncEmails(accountId);
       setSyncJobId(jobId);
@@ -139,11 +140,7 @@ function App() {
         await new Promise(r => setTimeout(r, 1500));
         const job = await getSyncStatus(jobId);
         if (!job) break;
-        const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
-        const elapsedStr = elapsedSec < 60 ? `${elapsedSec}s` : `${Math.floor(elapsedSec / 60)}m${elapsedSec % 60}s`;
-        const folderInfo = job.foldersTotal > 0 ? `${job.foldersDone}/${job.foldersTotal} pastas` : (job.phase || '');
-        const currentShort = job.currentFolder ? ` - ${job.currentFolder.split(' / ').pop()}` : '';
-        setSyncStatus(`${folderInfo} - ${job.emailsSynced} emails - ${elapsedStr}${currentShort}`);
+        setSyncJob(job);
         if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
           if (job.status === 'done') {
             const removedTxt = job.emailsRemoved ? `, ${job.emailsRemoved} removidos` : '';
@@ -177,7 +174,7 @@ function App() {
       message.error('Erro ao sincronizar emails');
     } finally {
       setSyncing(false);
-      setSyncStatus('');
+      setSyncJob(null);
       setSyncJobId(null);
     }
   };
@@ -441,18 +438,9 @@ function App() {
               onClick={() => handleSync()}
               loading={syncing}
               disabled={syncing}
-              title={syncStatus}
-              style={syncing ? { maxWidth: 420 } : undefined}
             >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: syncing ? 360 : undefined, verticalAlign: 'bottom' }}>
-                {syncing && syncStatus ? syncStatus : 'Sincronizar'}
-              </span>
+              Sincronizar
             </Button>
-            {syncing && syncJobId && (
-              <Button danger onClick={handleCancelSync}>
-                Cancelar
-              </Button>
-            )}
             <Button
               icon={<LogoutOutlined />}
               title="Terminar sessão"
@@ -569,6 +557,53 @@ function App() {
           setRulePreviewData(null);
         }}
       />
+
+      {syncing && (() => {
+        const elapsedSec = Math.round((Date.now() - syncStartedAt) / 1000);
+        const elapsedStr = elapsedSec < 60 ? `${elapsedSec}s` : `${Math.floor(elapsedSec / 60)}m${String(elapsedSec % 60).padStart(2, '0')}s`;
+        const pct = syncJob && syncJob.foldersTotal > 0
+          ? Math.min(100, Math.round((syncJob.foldersDone / syncJob.foldersTotal) * 100))
+          : 0;
+        const currentShort = syncJob?.currentFolder ? syncJob.currentFolder : (syncJob?.phase || 'A iniciar...');
+        return (
+          <div style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'min(720px, calc(100vw - 48px))',
+            background: '#fff',
+            borderRadius: 12,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+            border: '1px solid #e8e8e8',
+            padding: '14px 18px',
+            zIndex: 1500,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <SyncOutlined spin style={{ color: '#1677ff', fontSize: 18 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>A sincronizar emails</div>
+                <div style={{ fontSize: 12, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {currentShort}
+                </div>
+              </div>
+              {syncJobId && (
+                <Button size="small" danger onClick={handleCancelSync}>Cancelar</Button>
+              )}
+            </div>
+            <Progress
+              percent={pct}
+              size="small"
+              status="active"
+              format={() => `${syncJob?.foldersDone || 0}/${syncJob?.foldersTotal || 0}`}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#595959', marginTop: 4 }}>
+              <span>{syncJob?.emailsSynced || 0} emails sincronizados{syncJob?.emailsRemoved ? ` · ${syncJob.emailsRemoved} removidos` : ''}</span>
+              <span>{elapsedStr}</span>
+            </div>
+          </div>
+        );
+      })()}
     </Layout>
   );
 }
