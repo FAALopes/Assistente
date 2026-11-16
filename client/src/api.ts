@@ -318,3 +318,147 @@ export async function testAzureConfig(): Promise<{
   const { data } = await api.post('/api/config/test-azure');
   return data;
 }
+
+// =============== Archive ===============
+
+export interface ArchiveItem {
+  id: string;
+  name: string;
+  isFolder: boolean;
+  size?: number;
+  mimeType?: string;
+  webUrl?: string;
+  lastModifiedDateTime?: string;
+  meta?: {
+    id: string;
+    tags: string[];
+    notes: string | null;
+    entityId: string | null;
+    expiresAt: string | null;
+    entity?: { id: string; name: string; color: string | null } | null;
+  } | null;
+}
+
+export interface ArchiveEntity {
+  id: string;
+  name: string;
+  aliases: string[];
+  color: string | null;
+}
+
+export interface ArchiveRule {
+  id: string;
+  name: string;
+  accountId: string | null;
+  senderPattern: string | null;
+  subjectPattern: string | null;
+  attachmentOnly: boolean;
+  targetFolder: string;
+  filenamePattern: string | null;
+  entityId: string | null;
+  entity?: ArchiveEntity | null;
+  enabled: boolean;
+  timesApplied: number;
+  lastAppliedAt: string | null;
+}
+
+export interface MailAttachment {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+export async function getArchiveRoot(): Promise<{ accountId: string; rootId: string }> {
+  const { data } = await api.get('/api/archive/root');
+  return data;
+}
+
+export async function listArchiveFolder(folderId: string): Promise<ArchiveItem[]> {
+  const { data } = await api.get<ArchiveItem[]>(`/api/archive/folder/${folderId}`);
+  return data;
+}
+
+export async function createArchiveFolder(parentId: string, name: string): Promise<ArchiveItem> {
+  const { data } = await api.post('/api/archive/folder', { parentId, name });
+  return data;
+}
+
+export async function uploadArchiveFile(parentId: string, file: File): Promise<ArchiveItem> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('parentId', parentId);
+  const { data } = await api.post('/api/archive/upload', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function deleteArchiveItem(id: string): Promise<void> {
+  await api.delete(`/api/archive/item/${id}`);
+}
+
+export async function renameArchiveItem(id: string, newName: string): Promise<void> {
+  await api.patch(`/api/archive/item/${id}`, { newName });
+}
+
+export async function updateArchiveMeta(id: string, patch: { tags?: string[]; notes?: string | null; entityId?: string | null; expiresAt?: string | null; newName?: string }): Promise<void> {
+  await api.patch(`/api/archive/item/${id}`, patch);
+}
+
+export function archiveDownloadUrl(id: string): string {
+  return `/api/archive/download/${id}`;
+}
+
+export async function searchArchive(query: string): Promise<{ drive: ArchiveItem[]; meta: any[] }> {
+  const { data } = await api.get('/api/archive/search', { params: { q: query } });
+  return data;
+}
+
+export async function getArchiveEntities(): Promise<ArchiveEntity[]> {
+  const { data } = await api.get('/api/archive/entities');
+  return data;
+}
+
+export async function createArchiveEntity(input: { name: string; aliases?: string[]; color?: string | null }): Promise<ArchiveEntity> {
+  const { data } = await api.post('/api/archive/entities', input);
+  return data;
+}
+
+export async function updateArchiveEntity(id: string, patch: Partial<Pick<ArchiveEntity, 'name' | 'aliases' | 'color'>>): Promise<ArchiveEntity> {
+  const { data } = await api.patch(`/api/archive/entities/${id}`, patch);
+  return data;
+}
+
+export async function deleteArchiveEntity(id: string): Promise<void> {
+  await api.delete(`/api/archive/entities/${id}`);
+}
+
+export async function getArchiveRules(): Promise<ArchiveRule[]> {
+  const { data } = await api.get('/api/archive/rules');
+  return data;
+}
+
+export async function createArchiveRule(input: Partial<ArchiveRule>): Promise<ArchiveRule> {
+  const { data } = await api.post('/api/archive/rules', input);
+  return data;
+}
+
+export async function updateArchiveRule(id: string, patch: Partial<ArchiveRule>): Promise<ArchiveRule> {
+  const { data } = await api.patch(`/api/archive/rules/${id}`, patch);
+  return data;
+}
+
+export async function deleteArchiveRule(id: string): Promise<void> {
+  await api.delete(`/api/archive/rules/${id}`);
+}
+
+export async function getEmailAttachments(emailId: string): Promise<MailAttachment[]> {
+  const { data } = await api.get(`/api/archive/attachments/${emailId}`);
+  return data;
+}
+
+export async function saveAttachmentsToArchive(emailId: string, parentId: string): Promise<{ saved: number; items: ArchiveItem[] }> {
+  const { data } = await api.post('/api/archive/save-attachments', { emailId, parentId });
+  return data;
+}

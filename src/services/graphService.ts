@@ -54,7 +54,7 @@ export async function refreshAccessToken(accountId: string): Promise<string> {
     const msalClient = await getMsalClient();
     const result = await msalClient.acquireTokenByRefreshToken({
       refreshToken: account.refreshToken,
-      scopes: ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'],
+      scopes: ['user.read', 'mail.read', 'mail.readwrite', 'files.readwrite', 'offline_access'],
     });
 
     if (!result) {

@@ -10,6 +10,8 @@ import {
   LogoutOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
+import Archive from './components/Archive';
+import SaveAttachmentsSection from './components/SaveAttachmentsSection';
 import EmailList from './components/EmailList';
 import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
@@ -42,6 +44,7 @@ function App() {
   const [foldersByAccount, setFoldersByAccount] = useState<FoldersByAccount>({});
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<'mail' | 'archive'>('mail');
   const [syncing, setSyncing] = useState(false);
   const [syncJob, setSyncJob] = useState<import('./types').SyncJob | null>(null);
   const [syncStartedAt, setSyncStartedAt] = useState<number>(0);
@@ -414,9 +417,22 @@ function App() {
             zIndex: 10,
           }}
         >
-          <Title level={4} style={{ margin: 0 }}>
-            Painel de Email
-          </Title>
+          <Space size={0}>
+            <Button
+              type={tab === 'mail' ? 'primary' : 'text'}
+              onClick={() => setTab('mail')}
+              style={{ fontWeight: 600 }}
+            >
+              Emails
+            </Button>
+            <Button
+              type={tab === 'archive' ? 'primary' : 'text'}
+              onClick={() => setTab('archive')}
+              style={{ fontWeight: 600 }}
+            >
+              Arquivo
+            </Button>
+          </Space>
           <Space>
             {isJunkFolder && (
               <Button
@@ -475,7 +491,10 @@ function App() {
           </Space>
         </Header>
 
-        <Content style={{ padding: '16px 24px', background: '#f5f5f5' }}>
+        <Content style={{ padding: tab === 'archive' ? 0 : '16px 24px', background: '#f5f5f5' }}>
+          {tab === 'archive' ? <Archive /> : (
+          <>
+
           <RecentApplicationsBanner
             applications={recentApplications}
             onRefresh={() => {
@@ -546,9 +565,14 @@ function App() {
                 <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, fontSize: 13, lineHeight: 1.7, color: '#333', whiteSpace: 'pre-wrap' }}>
                   {previewEmail.bodyPreview || 'Sem preview disponível'}
                 </div>
+                {previewEmail.hasAttachments && (
+                  <SaveAttachmentsSection email={previewEmail} />
+                )}
               </div>
             )}
           </div>
+          </>
+          )}
         </Content>
       </Layout>
 

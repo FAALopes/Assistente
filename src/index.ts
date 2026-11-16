@@ -14,6 +14,7 @@ import emailActionRoutes from './routes/emailActions';
 import diagnosticsRoutes from './routes/diagnostics';
 import configRoutes from './routes/config';
 import syncRoutes from './routes/sync';
+import archiveRoutes from './routes/archive';
 import { startAutoCleanup, runCleanup } from './services/autoCleanup';
 import { cleanupOrphanJobs } from './services/syncJob';
 import { requireAuth, requireAuthOrCronToken } from './middleware/auth';
@@ -83,6 +84,7 @@ app.use('/api/email-actions', emailActionRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/archive', archiveRoutes);
 
 // Serve frontend static files in production
 const clientPath = path.join(__dirname, '..', 'dist', 'client');

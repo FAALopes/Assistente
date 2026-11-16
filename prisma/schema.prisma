@@ -200,6 +200,66 @@ model EmailAction {
   @@map("email_actions")
 }
 
+model ArchiveEntity {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  aliases   String[] @default([])
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     ArchiveItem[]
+  rules     ArchiveRule[]
+
+  @@map("archive_entities")
+}
+
+model ArchiveItem {
+  id            String   @id @default(uuid())
+  accountId     String   // MS account whose OneDrive hosts the file
+  driveItemId   String
+  name          String
+  path          String   // full path relative to /Assistente
+  isFolder      Boolean  @default(false)
+  size          BigInt?
+  mimeType      String?
+  entityId      String?
+  entity        ArchiveEntity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  tags          String[] @default([])
+  notes         String?
+  expiresAt     DateTime?
+  sourceEmailId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([accountId, driveItemId])
+  @@index([accountId])
+  @@index([entityId])
+  @@index([path])
+  @@index([name])
+  @@map("archive_items")
+}
+
+model ArchiveRule {
+  id              String   @id @default(uuid())
+  name            String
+  accountId       String?  // null = all accounts
+  senderPattern   String?  // substring match on from
+  subjectPattern  String?  // substring match on subject
+  attachmentOnly  Boolean  @default(true)  // only trigger for emails with attachments
+  targetFolder    String   // path under /Assistente, e.g. "Faturas/Indaqua"
+  filenamePattern String?  // tokens: {date}, {entity}, {subject}, {original}, {ext}
+  entityId        String?
+  entity          ArchiveEntity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  enabled         Boolean  @default(true)
+  timesApplied    Int      @default(0)
+  lastAppliedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled])
+  @@map("archive_rules")
+}
+
 model RuleApplication {
   id               String        @id @default(uuid())
   emailId          String

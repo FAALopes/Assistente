@@ -12,6 +12,7 @@ import {
   listAllImapUids,
   type ImapFlatFolder,
 } from './imapService';
+import { applyArchiveRulesToEmail } from './archiveService';
 
 interface JobState {
   jobId: string;
@@ -42,37 +43,31 @@ async function updateJob(jobId: string, patch: Record<string, any>): Promise<voi
   await prisma.syncJob.update({ where: { id: jobId }, data: patch });
 }
 
-async function upsertEmail(accountId: string, folderId: string, g: any): Promise<void> {
+async function upsertEmail(accountId: string, folderId: string, g: any): Promise<{ created: boolean; email: any }> {
   const fromName = g.from?.emailAddress?.name || '';
   const fromEmail = g.from?.emailAddress?.address || 'unknown';
   const fromDisplay = fromName && fromName !== fromEmail ? `${fromName} <${fromEmail}>` : fromEmail;
   const toAddress = g.toRecipients?.[0]?.emailAddress?.address || null;
-  await prisma.email.upsert({
+  const existing = await prisma.email.findUnique({ where: { externalId: g.id }, select: { id: true } });
+  const email = await prisma.email.upsert({
     where: { externalId: g.id },
     create: {
-      externalId: g.id,
-      accountId,
-      from: fromDisplay,
-      to: toAddress,
-      subject: g.subject || null,
-      bodyPreview: g.bodyPreview || null,
+      externalId: g.id, accountId, from: fromDisplay, to: toAddress,
+      subject: g.subject || null, bodyPreview: g.bodyPreview || null,
       folder: folderId,
       receivedAt: g.receivedDateTime ? new Date(g.receivedDateTime) : new Date(),
-      isRead: g.isRead || false,
-      importance: g.importance || null,
+      isRead: g.isRead || false, importance: g.importance || null,
       hasAttachments: g.hasAttachments || false,
     },
     update: {
-      from: fromDisplay,
-      to: toAddress,
-      subject: g.subject || null,
-      bodyPreview: g.bodyPreview || null,
+      from: fromDisplay, to: toAddress,
+      subject: g.subject || null, bodyPreview: g.bodyPreview || null,
       folder: folderId,
-      isRead: g.isRead || false,
-      importance: g.importance || null,
+      isRead: g.isRead || false, importance: g.importance || null,
       hasAttachments: g.hasAttachments || false,
     },
   });
+  return { created: !existing, email };
 }
 
 async function syncMicrosoftAccount(state: JobState, accountId: string, accountEmail: string): Promise<void> {
@@ -127,12 +122,19 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
         async (changed, deleted, _total) => {
           // Parallelize upserts (10 at a time) instead of serial
           const CHUNK = 10;
+          const newEmails: any[] = [];
           for (let i = 0; i < changed.length; i += CHUNK) {
             const chunk = changed.slice(i, i + CHUNK);
-            await Promise.all(chunk.map(async (em) => {
-              try { await upsertEmail(accountId, folder.id, em); state.emailsSynced++; }
-              catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
+            const results = await Promise.all(chunk.map(async (em) => {
+              try { const r = await upsertEmail(accountId, folder.id, em); state.emailsSynced++; return r; }
+              catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); return null; }
             }));
+            for (const r of results) if (r?.created) newEmails.push(r.email);
+          }
+          // Fire archive rules for newly-created MS emails with attachments (best-effort, don't block)
+          for (const em of newEmails) {
+            if (!em.hasAttachments) continue;
+            applyArchiveRulesToEmail(em).catch(e => state.errors.push(`archive rules: ${e.message}`));
           }
           if (deleted.length > 0) {
             const res = await prisma.email.deleteMany({ where: { externalId: { in: deleted } } });

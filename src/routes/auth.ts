@@ -8,7 +8,7 @@ import { testImapConnection } from '../services/imapService';
 
 const router = Router();
 
-const SCOPES = ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'];
+const SCOPES = ['user.read', 'mail.read', 'mail.readwrite', 'files.readwrite', 'offline_access'];
 
 // Stateless signed state (no session dependency — survives Railway restarts/multi-instance)
 const STATE_SECRET = process.env.SESSION_SECRET || process.env.AZURE_CLIENT_SECRET || 'dev-fallback-change-me';
