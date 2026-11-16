@@ -251,6 +251,11 @@ export async function startSyncJob(accountId?: string): Promise<string> {
           : { provider: { in: ['MICROSOFT', 'IMAP'] } },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       });
+      // Prefer Microsoft first (faster via delta sync); IMAP is heavier so goes last
+      accounts.sort((a, b) => {
+        const score = (p: string) => (p === 'MICROSOFT' ? 0 : 1);
+        return score(a.provider) - score(b.provider);
+      });
       for (const acc of accounts) {
         try {
           if (acc.provider === 'MICROSOFT') {

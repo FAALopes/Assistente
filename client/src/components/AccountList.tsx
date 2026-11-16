@@ -15,9 +15,10 @@ import {
   ArrowDownOutlined,
   EyeOutlined,
   MailOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import type { EmailAccount, FoldersByAccount } from '../types';
-import { updateAccount, moveAccount } from '../api';
+import { updateAccount, moveAccount, syncEmails } from '../api';
 import { COLOR_PALETTE } from '../constants/colorPalette';
 import AddImapModal from './AddImapModal';
 
@@ -185,6 +186,16 @@ function AccountList({
     setMenu(null);
     onSelectAccount(accountId);
     onSelectFolder(undefined);
+  };
+
+  const syncOnlyAccount = async (accountId: string) => {
+    setMenu(null);
+    try {
+      await syncEmails(accountId);
+      message.success('Sincronizacao iniciada para esta conta');
+    } catch {
+      message.error('Erro ao iniciar sincronizacao');
+    }
   };
 
   const menuAccount = menu ? accounts.find(a => a.id === menu.accountId) : null;
@@ -481,6 +492,22 @@ function AccountList({
             onClick={() => viewOnlyAccount(menuAccount.id)}
           >
             <EyeOutlined /> Ver só esta conta
+          </div>
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: 'pointer',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={() => syncOnlyAccount(menuAccount.id)}
+          >
+            <SyncOutlined /> Sincronizar so esta conta
           </div>
           <div
             style={{

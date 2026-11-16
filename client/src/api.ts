@@ -111,8 +111,8 @@ export async function getFoldersByAccount(): Promise<FoldersByAccount> {
   return data;
 }
 
-export async function syncEmails(): Promise<{ jobId: string }> {
-  const { data } = await api.post<{ jobId: string }>('/api/emails/sync');
+export async function syncEmails(accountId?: string): Promise<{ jobId: string }> {
+  const { data } = await api.post<{ jobId: string }>('/api/sync/start', accountId ? { accountId } : {});
   return data;
 }
 
