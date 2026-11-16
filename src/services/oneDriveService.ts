@@ -40,26 +40,49 @@ function mapItem(it: any, parentPath?: string): DriveItem {
 export async function ensureArchiveRoot(accountId: string): Promise<string> {
   const token = await getValidToken(accountId);
   const client = createClient(token);
+  const dbg = (...args: any[]) => console.log('[ensureArchiveRoot]', ...args);
+
+  // Step 1 — confirm the account has a OneDrive at all
+  try {
+    const drive: any = await client.api('/me/drive').get();
+    dbg('drive ok id=', drive?.id, 'type=', drive?.driveType, 'owner=', drive?.owner?.user?.displayName);
+  } catch (e: any) {
+    dbg('GET /me/drive failed', { statusCode: e?.statusCode, code: e?.code, body: e?.body, msg: e?.message });
+    throw new Error(`OneDrive nao acessivel: ${e?.message || 'erro desconhecido'}. Re-autoriza a conta MS com scope Files.ReadWrite.`);
+  }
+
+  // Step 2 — try to get /Assistente folder
   try {
     const existing: any = await client.api(`/me/drive/root:/${ARCHIVE_ROOT_NAME}`).get();
+    dbg('found existing root id=', existing?.id);
     return existing.id;
   } catch (e: any) {
     const sc = e?.statusCode ?? e?.status;
     const code = e?.code || e?.body?.error?.code || '';
-    const isNotFound = sc === 404 || /itemNotFound|not.?found/i.test(code) || /not.?found/i.test(String(e?.message || ''));
+    const msg = String(e?.message || '');
+    const isNotFound = sc === 404 || /itemNotFound|not.?found/i.test(code) || /not.?found/i.test(msg);
+    dbg('GET root:/Assistente failed', { statusCode: sc, code, msg, willCreate: isNotFound });
     if (!isNotFound) throw e;
   }
+
+  // Step 3 — create it
   try {
     const created: any = await client.api('/me/drive/root/children').post({
       name: ARCHIVE_ROOT_NAME,
       folder: {},
       '@microsoft.graph.conflictBehavior': 'replace',
     });
+    dbg('created root id=', created?.id);
     return created.id;
   } catch (createErr: any) {
-    // Race or already exists under a different case — try once more to read it
-    const existing: any = await client.api(`/me/drive/root:/${ARCHIVE_ROOT_NAME}`).get();
-    return existing.id;
+    dbg('POST root/children failed', { statusCode: createErr?.statusCode, code: createErr?.code, body: createErr?.body, msg: createErr?.message });
+    // Last resort: maybe it exists after all
+    try {
+      const existing: any = await client.api(`/me/drive/root:/${ARCHIVE_ROOT_NAME}`).get();
+      return existing.id;
+    } catch {
+      throw new Error(`Nao foi possivel criar pasta /Assistente em OneDrive: ${createErr?.message || 'erro'}`);
+    }
   }
 }
 
