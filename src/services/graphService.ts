@@ -251,16 +251,19 @@ export async function listAllMailFoldersFlat(accessToken: string): Promise<FlatF
   const flat: FlatFolder[] = [];
 
   async function fetchChildren(parentPath: string, parentId: string | null, depth: number): Promise<void> {
-    const url = parentId
+    const baseUrl = parentId
       ? `/me/mailFolders/${parentId}/childFolders`
       : '/me/mailFolders';
-    let next: string | null = url;
+    let next: string | null = baseUrl;
+    let isFirst = true;
     while (next) {
-      const resp: any = await client
-        .api(next)
-        .top(100)
-        .select('id,displayName,parentFolderId,totalItemCount,unreadItemCount,childFolderCount')
-        .get();
+      let req = client.api(next);
+      // Only add $top/$select on the first request; nextLinks already carry query params
+      if (isFirst) {
+        req = req.top(100).select('id,displayName,parentFolderId,totalItemCount,unreadItemCount,childFolderCount');
+      }
+      const resp: any = await req.get();
+      isFirst = false;
       const items: any[] = resp.value || [];
       for (const f of items) {
         const path = parentPath ? `${parentPath}/${f.displayName}` : f.displayName;
