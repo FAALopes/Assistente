@@ -210,6 +210,121 @@ export async function fetchAllImapMessages(
   return totalSoFar;
 }
 
+export interface ImapFolderStatus {
+  messages: number;
+  uidNext: number;
+  uidValidity: number;
+}
+
+export async function getFolderStatus(accountId: string, folderPath: string): Promise<ImapFolderStatus | null> {
+  const client = await openClient(accountId);
+  try {
+    const st: any = await client.status(folderPath, { messages: true, uidNext: true, uidValidity: true });
+    return {
+      messages: Number(st?.messages || 0),
+      uidNext: Number(st?.uidNext || 0),
+      uidValidity: Number(st?.uidValidity || 0),
+    };
+  } catch {
+    return null;
+  } finally {
+    await client.logout();
+  }
+}
+
+/**
+ * Fetch messages with UID strictly greater than `sinceUid`. Returns highest UID seen.
+ * Also returns the UIDVALIDITY of the mailbox (caller should compare with stored).
+ */
+export async function fetchImapMessagesSince(
+  accountId: string,
+  folderPath: string,
+  sinceUid: number,
+  onBatch?: (batch: MailEnvelope[], totalSoFar: number) => Promise<void>,
+): Promise<{ highestUid: number; uidValidity: number; total: number }> {
+  const client = await openClient(accountId);
+  let totalSoFar = 0;
+  let highestUid = sinceUid;
+  let uidValidity = 0;
+  try {
+    const lock = await client.getMailboxLock(folderPath);
+    try {
+      const mb: any = client.mailbox;
+      uidValidity = Number(mb?.uidValidity || 0);
+      if ((mb?.exists || 0) === 0) return { highestUid, uidValidity, total: 0 };
+      const range = `${sinceUid + 1}:*`;
+      const batch: MailEnvelope[] = [];
+      for await (const msg of client.fetch(range, {
+        uid: true,
+        envelope: true,
+        flags: true,
+        internalDate: true,
+        bodyStructure: true,
+        source: false,
+      } as any, { uid: true } as any)) {
+        const uid = Number(msg.uid);
+        if (uid <= sinceUid) continue; // defensive
+        if (uid > highestUid) highestUid = uid;
+        const env = msg.envelope as any;
+        const fromAddr = env?.from?.[0];
+        const toAddr = env?.to?.[0];
+        const flagsVal = msg.flags as unknown;
+        const flags = flagsVal instanceof Set ? flagsVal : new Set<string>(flagsVal as string[] | undefined);
+        const bs: any = msg.bodyStructure;
+        const hasAttachments = Boolean(bs && hasAttachmentPart(bs));
+        batch.push({
+          id: buildExternalId(accountId, folderPath, uid),
+          from: fromAddr ? {
+            emailAddress: {
+              address: fromAddr.address ? `${fromAddr.address}` : undefined,
+              name: fromAddr.name || undefined,
+            },
+          } : undefined,
+          toRecipients: toAddr ? [{ emailAddress: { address: toAddr.address } }] : [],
+          subject: env?.subject || '',
+          bodyPreview: '',
+          receivedDateTime: (msg.internalDate || env?.date || new Date()).toISOString(),
+          isRead: flags.has('\\Seen'),
+          importance: null as any,
+          hasAttachments,
+        });
+        if (batch.length >= 500) {
+          totalSoFar += batch.length;
+          if (onBatch) await onBatch([...batch], totalSoFar);
+          batch.length = 0;
+        }
+      }
+      if (batch.length > 0) {
+        totalSoFar += batch.length;
+        if (onBatch) await onBatch(batch, totalSoFar);
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+  return { highestUid, uidValidity, total: totalSoFar };
+}
+
+/**
+ * Return all UIDs currently in a folder (used for deletion detection). Lightweight: UIDs only.
+ */
+export async function listAllImapUids(accountId: string, folderPath: string): Promise<number[]> {
+  const client = await openClient(accountId);
+  try {
+    const lock = await client.getMailboxLock(folderPath);
+    try {
+      const uids = await client.search({ all: true }, { uid: true }) as unknown as number[];
+      return Array.isArray(uids) ? uids.map(Number) : [];
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
 export function buildExternalId(accountId: string, folder: string, uid: number): string {
   return `imap:${accountId}:${folder}:${uid}`;
 }

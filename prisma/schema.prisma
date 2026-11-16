@@ -63,6 +63,7 @@ model EmailAccount {
   imapPasswordEnc  String?
   imapTls          Boolean @default(true)
   sortOrder    Int       @default(0)
+  globalDeltaLink  String?  // Microsoft Graph /me/messages/delta link
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   emails       Email[]
@@ -82,7 +83,9 @@ model MailFolder {
   wellKnownName  String?  // inbox, junkemail, sentitems, drafts, deleteditems, archive, outbox, conversationhistory, ...
   totalItemCount Int      @default(0)
   unreadItemCount Int     @default(0)
-  deltaLink      String?  // Microsoft Graph delta token for incremental sync
+  deltaLink      String?  // (legacy per-folder MS delta; superseded by EmailAccount.globalDeltaLink)
+  lastUid        Int?     // IMAP: last UID fetched in this folder
+  uidValidity    BigInt?  // IMAP: UIDVALIDITY; change forces full re-fetch
   lastSyncAt     DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -380,6 +380,60 @@ export async function fetchFolderDelta(
   return { changed: changedAll, deleted: deletedAll, deltaLink };
 }
 
+export interface AccountDeltaItem {
+  removed?: boolean;
+  id: string;
+  parentFolderId?: string;
+  from?: any;
+  toRecipients?: any;
+  subject?: string;
+  bodyPreview?: string;
+  receivedDateTime?: string;
+  isRead?: boolean;
+  importance?: string;
+  hasAttachments?: boolean;
+}
+
+/**
+ * Account-wide delta: single stream of ALL mail changes across every folder.
+ * Returns new deltaLink to store on the account. Replaces per-folder delta.
+ */
+export async function fetchAccountDelta(
+  accessToken: string,
+  previousDeltaLink?: string | null,
+  onBatch?: (items: AccountDeltaItem[], totalSoFar: number) => Promise<void>,
+): Promise<{ deltaLink: string; totalItems: number }> {
+  const client = createGraphClient(accessToken);
+  let url: string = previousDeltaLink || '/me/messages/delta';
+  let totalSoFar = 0;
+  let deltaLink = '';
+  const isBootstrap = !previousDeltaLink;
+
+  while (true) {
+    let req = client.api(url);
+    if (isBootstrap && !url.includes('$deltatoken') && !url.includes('$skiptoken')) {
+      req = req.select('id,parentFolderId,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments');
+    }
+    const resp: any = await req.get();
+    const raw: any[] = resp.value || [];
+    const items: AccountDeltaItem[] = raw.map((it) => {
+      if (it['@removed']) return { removed: true, id: it.id } as AccountDeltaItem;
+      return { id: it.id, parentFolderId: it.parentFolderId, from: it.from, toRecipients: it.toRecipients,
+        subject: it.subject, bodyPreview: it.bodyPreview, receivedDateTime: it.receivedDateTime,
+        isRead: it.isRead, importance: it.importance, hasAttachments: it.hasAttachments };
+    });
+    totalSoFar += items.length;
+    if (onBatch && items.length > 0) await onBatch(items, totalSoFar);
+
+    const nextLink = resp['@odata.nextLink'];
+    const dLink = resp['@odata.deltaLink'];
+    if (dLink) { deltaLink = dLink; break; }
+    if (nextLink) { url = nextLink; continue; }
+    break;
+  }
+  return { deltaLink, totalItems: totalSoFar };
+}
+
 /**
  * Move an email to a specific folder by id.
  */
