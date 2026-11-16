@@ -125,9 +125,14 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
         folder.id,
         row?.deltaLink || null,
         async (changed, deleted, _total) => {
-          for (const em of changed) {
-            try { await upsertEmail(accountId, folder.id, em); state.emailsSynced++; }
-            catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
+          // Parallelize upserts (10 at a time) instead of serial
+          const CHUNK = 10;
+          for (let i = 0; i < changed.length; i += CHUNK) {
+            const chunk = changed.slice(i, i + CHUNK);
+            await Promise.all(chunk.map(async (em) => {
+              try { await upsertEmail(accountId, folder.id, em); state.emailsSynced++; }
+              catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
+            }));
           }
           if (deleted.length > 0) {
             const res = await prisma.email.deleteMany({ where: { externalId: { in: deleted } } });
@@ -151,11 +156,17 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
     });
   };
 
-  for (let i = 0; i < folders.length; i += CONCURRENCY) {
-    if (await checkCancelled(state)) return;
-    const batch = folders.slice(i, i + CONCURRENCY);
-    await Promise.all(batch.map(syncOneFolder));
-  }
+  // Worker pool: N workers each pull the next folder from the queue (no batch waiting)
+  const queue = [...folders];
+  const workers = Array.from({ length: CONCURRENCY }, async () => {
+    while (queue.length > 0) {
+      if (await checkCancelled(state)) return;
+      const folder = queue.shift();
+      if (!folder) return;
+      await syncOneFolder(folder);
+    }
+  });
+  await Promise.all(workers);
 }
 
 async function syncImapAccount(state: JobState, accountId: string, accountEmail: string): Promise<void> {
@@ -240,9 +251,13 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
       const { highestUid, uidValidity } = await fetchImapMessagesSince(
         accountId, folder.path, effectiveLastUid,
         async (batch, _total) => {
-          for (const em of batch) {
-            try { await upsertEmail(accountId, folder.path, em); state.emailsSynced++; }
-            catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
+          const CHUNK = 10;
+          for (let i = 0; i < batch.length; i += CHUNK) {
+            const chunk = batch.slice(i, i + CHUNK);
+            await Promise.all(chunk.map(async (em) => {
+              try { await upsertEmail(accountId, folder.path, em); state.emailsSynced++; }
+              catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
+            }));
           }
           await updateJob(state.jobId, { emailsSynced: state.emailsSynced });
         },

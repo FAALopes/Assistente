@@ -348,12 +348,16 @@ export async function fetchFolderDelta(
   let totalSoFar = 0;
   let deltaLink = '';
 
+  let isFirst = true;
   while (true) {
     let req = client.api(url);
-    // Only set select on the initial request (not on nextLink/deltaLink URLs)
-    if (!previousDeltaLink && !url.includes('$deltatoken') && !url.includes('$skiptoken')) {
-      req = req.select('id,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments');
+    // Only set top/select on the initial request (not on nextLink/deltaLink URLs — they carry params)
+    if (isFirst && !url.includes('$deltatoken') && !url.includes('$skiptoken')) {
+      req = req.top(500).select('id,from,toRecipients,subject,bodyPreview,receivedDateTime,isRead,importance,hasAttachments');
     }
+    isFirst = false;
+    // Graph delta supports a prefer header for max page size
+    req = req.header('Prefer', 'odata.maxpagesize=500');
     const resp: any = await req.get();
     const items: any[] = resp.value || [];
     const batchChanged: GraphEmail[] = [];
