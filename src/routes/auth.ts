@@ -117,6 +117,7 @@ router.get('/microsoft', async (_req: Request, res: Response) => {
       scopes: SCOPES,
       redirectUri: process.env.REDIRECT_URI || '',
       state,
+      prompt: 'consent',
     });
 
     res.redirect(authCodeUrl);
