@@ -130,6 +130,8 @@ function App() {
     fetchEmails();
   }, [fetchEmails]);
 
+  // Accounts that failed with re-auth error this session — skip until page reload
+  const brokenAccountsRef = useRef<Set<string>>(new Set());
   // Auto-sync tick: every 60s, if tab is visible and some account is due, trigger per-account sync
   useEffect(() => {
     const tick = async () => {
@@ -138,6 +140,7 @@ function App() {
       const now = Date.now();
       for (const acc of accounts) {
         if (!acc.autoSyncMinutes) continue;
+        if (brokenAccountsRef.current.has(acc.id)) continue;
         const last = acc.lastSyncAt ? new Date(acc.lastSyncAt).getTime() : 0;
         if (now - last >= acc.autoSyncMinutes * 60_000) {
           handleSync(acc.id);
@@ -175,17 +178,24 @@ function App() {
             message.error('Sync falhou');
           }
           if (job.errors && job.errors.length > 0) {
-            Modal.warning({
-              title: `${job.errors.length} erro(s) durante sync`,
-              content: (
-                <ul style={{ margin: 0, paddingLeft: 20, maxHeight: 300, overflow: 'auto' }}>
-                  {job.errors.map((e, i) => (
-                    <li key={i} style={{ fontSize: 12, marginBottom: 4 }}>{e}</li>
-                  ))}
-                </ul>
-              ),
-              width: 600,
-            });
+            const reauthOnly = job.errors.every((e) => /Token refresh failed|re-authenticate/i.test(e));
+            if (reauthOnly) {
+              // Mark the account as broken so auto-sync stops nagging this session
+              if (accountId) brokenAccountsRef.current.add(accountId);
+              message.warning('Sessao expirou. Re-adiciona a conta Microsoft para continuar.', 6);
+            } else {
+              Modal.warning({
+                title: `${job.errors.length} erro(s) durante sync`,
+                content: (
+                  <ul style={{ margin: 0, paddingLeft: 20, maxHeight: 300, overflow: 'auto' }}>
+                    {job.errors.map((e, i) => (
+                      <li key={i} style={{ fontSize: 12, marginBottom: 4 }}>{e}</li>
+                    ))}
+                  </ul>
+                ),
+                width: 600,
+              });
+            }
           }
           break;
         }

@@ -50,15 +50,26 @@ export async function refreshAccessToken(accountId: string): Promise<string> {
     throw new Error('No refresh token available for account');
   }
 
-  try {
-    const msalClient = await getMsalClient();
-    const result = await msalClient.acquireTokenByRefreshToken({
-      refreshToken: account.refreshToken,
-      scopes: ['user.read', 'mail.read', 'mail.readwrite', 'files.readwrite', 'offline_access'],
-    });
+  const msalClient = await getMsalClient();
+  const FULL_SCOPES = ['user.read', 'mail.read', 'mail.readwrite', 'files.readwrite', 'offline_access'];
+  const LEGACY_SCOPES = ['user.read', 'mail.read', 'mail.readwrite', 'offline_access'];
 
-    if (!result) {
-      throw new Error('Token refresh returned null');
+  const tryScopes = async (scopes: string[]) => {
+    const result = await msalClient.acquireTokenByRefreshToken({
+      refreshToken: account.refreshToken!,
+      scopes,
+    });
+    if (!result) throw new Error('Token refresh returned null');
+    return result;
+  };
+
+  try {
+    let result;
+    try {
+      result = await tryScopes(FULL_SCOPES);
+    } catch (e: any) {
+      // Scope not consented (likely files.readwrite on a legacy account) -> keep working with mail-only
+      result = await tryScopes(LEGACY_SCOPES);
     }
 
     const newRefreshToken = (result as any).refreshToken || account.refreshToken;
