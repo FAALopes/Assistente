@@ -18,7 +18,7 @@ import {
   SyncOutlined,
 } from '@ant-design/icons';
 import type { EmailAccount, FoldersByAccount } from '../types';
-import { updateAccount, moveAccount, syncEmails } from '../api';
+import { updateAccount, moveAccount } from '../api';
 import { COLOR_PALETTE } from '../constants/colorPalette';
 import AddImapModal from './AddImapModal';
 
@@ -32,6 +32,7 @@ interface AccountListProps {
   onSelectAccount: (accountId: string | undefined) => void;
   onSelectFolder: (folder: string | undefined) => void;
   onAccountUpdated?: () => void;
+  onSyncAccount?: (accountId: string) => void;
 }
 
 const providerColors: Record<string, string> = {
@@ -107,6 +108,7 @@ function AccountList({
   onSelectAccount,
   onSelectFolder,
   onAccountUpdated,
+  onSyncAccount,
 }: AccountListProps) {
   const hasActiveFilter = selectedAccountId || selectedFolder;
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
@@ -188,13 +190,12 @@ function AccountList({
     onSelectFolder(undefined);
   };
 
-  const syncOnlyAccount = async (accountId: string) => {
+  const syncOnlyAccount = (accountId: string) => {
     setMenu(null);
-    try {
-      await syncEmails(accountId);
-      message.success('Sincronizacao iniciada para esta conta');
-    } catch {
-      message.error('Erro ao iniciar sincronizacao');
+    if (onSyncAccount) {
+      onSyncAccount(accountId);
+    } else {
+      message.error('Sync nao disponivel');
     }
   };
 

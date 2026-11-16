@@ -126,12 +126,13 @@ function App() {
     fetchEmails();
   }, [fetchEmails]);
 
-  const handleSync = async () => {
+  const handleSync = async (accountId?: string) => {
+    if (syncing) return;
     setSyncing(true);
     setSyncStatus('A iniciar...');
     const startedAt = Date.now();
     try {
-      const { jobId } = await syncEmails();
+      const { jobId } = await syncEmails(accountId);
       setSyncJobId(jobId);
       // Poll every 1500ms
       while (true) {
@@ -387,6 +388,7 @@ function App() {
               handleFilterChange({ folder })
             }
             onAccountUpdated={fetchAccounts}
+            onSyncAccount={handleSync}
           />
         )}
       </Sider>
@@ -447,7 +449,7 @@ function App() {
             <Button
               type="primary"
               icon={<SyncOutlined spin={syncing} />}
-              onClick={handleSync}
+              onClick={() => handleSync()}
               loading={syncing}
               disabled={syncing}
               title={syncStatus}
