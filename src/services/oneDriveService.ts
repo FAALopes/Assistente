@@ -44,14 +44,23 @@ export async function ensureArchiveRoot(accountId: string): Promise<string> {
     const existing: any = await client.api(`/me/drive/root:/${ARCHIVE_ROOT_NAME}`).get();
     return existing.id;
   } catch (e: any) {
-    if (e?.statusCode !== 404) throw e;
+    const sc = e?.statusCode ?? e?.status;
+    const code = e?.code || e?.body?.error?.code || '';
+    const isNotFound = sc === 404 || /itemNotFound|not.?found/i.test(code) || /not.?found/i.test(String(e?.message || ''));
+    if (!isNotFound) throw e;
   }
-  const created: any = await client.api('/me/drive/root/children').post({
-    name: ARCHIVE_ROOT_NAME,
-    folder: {},
-    '@microsoft.graph.conflictBehavior': 'fail',
-  });
-  return created.id;
+  try {
+    const created: any = await client.api('/me/drive/root/children').post({
+      name: ARCHIVE_ROOT_NAME,
+      folder: {},
+      '@microsoft.graph.conflictBehavior': 'replace',
+    });
+    return created.id;
+  } catch (createErr: any) {
+    // Race or already exists under a different case — try once more to read it
+    const existing: any = await client.api(`/me/drive/root:/${ARCHIVE_ROOT_NAME}`).get();
+    return existing.id;
+  }
 }
 
 export async function listFolder(accountId: string, folderId: string): Promise<DriveItem[]> {
