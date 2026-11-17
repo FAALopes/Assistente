@@ -498,14 +498,8 @@ function AccountList({
                     selectedFolder,
                     toggleFolderExpand,
                     (folderId) => {
-                      const isSel = selectedAccountId === account.id && selectedFolder === folderId;
-                      if (isSel) {
-                        onSelectFolder(undefined);
-                        onSelectAccount(account.id);
-                      } else {
-                        onSelectAccount(account.id);
-                        onSelectFolder(folderId);
-                      }
+                      onSelectAccount(account.id);
+                      onSelectFolder(folderId);
                     },
                   )}
                 </div>
