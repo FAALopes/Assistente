@@ -476,7 +476,7 @@ function App() {
           )}
 
           <div style={{ display: 'flex', gap: 16 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 2, minWidth: 0 }}>
               <Spin spinning={loading}>
                 <EmailList
                   emails={emails}
@@ -499,9 +499,8 @@ function App() {
               </Spin>
             </div>
             <div style={{
-              width: 'min(44vw, 560px)',
-              minWidth: 380,
-              flexShrink: 0,
+              flex: 1,
+              minWidth: 320,
               background: '#fff',
               borderRadius: 8,
               padding: previewEmail ? 14 : 16,
