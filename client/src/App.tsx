@@ -22,7 +22,7 @@ import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
 import ConfigPanel from './components/ConfigPanel';
-import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, cancelSyncJob, getSuggestions, deleteEmail, checkSenderRule, createRule, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
+import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, cancelSyncJob, getSuggestions, deleteEmail, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
 import type {
   EmailAccount,
   Email,
@@ -237,61 +237,10 @@ function App() {
 
   const handleDeleteEmail = async (id: string) => {
     try {
-      // Find the email to get sender info
-      const email = emails.find((e) => e.id === id);
-      if (!email) {
-        await deleteEmail(id);
-        message.success('Email apagado');
-        fetchEmails();
-        fetchFolders();
-        return;
-      }
-
-      // Extract sender email address from "Name <email>" format
-      const senderAddress = email.from.match(/<(.+)>$/)?.[1] || email.from;
-
-      // Check if a rule already exists for this sender
-      const { hasRule } = await checkSenderRule(senderAddress);
-
-      if (!hasRule) {
-        // Show modal asking to create rule
-        Modal.confirm({
-          title: 'Criar regra automática?',
-          content: `Criar regra para apagar sempre emails de ${senderAddress}?`,
-          okText: 'Sim, criar regra',
-          cancelText: 'Não, apenas apagar',
-          onOk: async () => {
-            try {
-              await createRule({
-                field: 'FROM',
-                operator: 'CONTAINS',
-                value: senderAddress,
-                action: 'DELETE',
-                confidence: 100,
-                timesApplied: 0,
-              });
-              message.success(`Regra criada para ${senderAddress}`);
-            } catch {
-              message.error('Erro ao criar regra');
-            }
-            await deleteEmail(id);
-            message.success('Email apagado');
-            fetchEmails();
-            fetchFolders();
-          },
-          onCancel: async () => {
-            await deleteEmail(id);
-            message.success('Email apagado');
-            fetchEmails();
-            fetchFolders();
-          },
-        });
-      } else {
-        await deleteEmail(id);
-        message.success('Email apagado');
-        fetchEmails();
-        fetchFolders();
-      }
+      await deleteEmail(id);
+      message.success('Email apagado');
+      fetchEmails();
+      fetchFolders();
     } catch {
       message.error('Erro ao apagar email');
     }

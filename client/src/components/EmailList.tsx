@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Tag, Input, Select, Space, Button, Popconfirm, message } from 'antd';
+import { Table, Tag, Input, Select, Space, Button, message } from 'antd';
 import {
   SearchOutlined,
   DeleteOutlined,
@@ -182,24 +182,16 @@ function EmailList({
     key: 'actions',
     width: 36,
     render: (_: unknown, record: Email) => (
-      <Popconfirm
-        title="Apagar este email?"
-        description="O email será movido para o lixo no servidor."
-        onConfirm={() => onDelete?.(record.id)}
-        okText="Apagar"
-        cancelText="Cancelar"
-        okButtonProps={{ danger: true }}
-      >
-        <Button
-          type="text"
-          size="small"
-          icon={<DeleteOutlined />}
-          danger
-          style={{ opacity: 0.4 }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
-        />
-      </Popconfirm>
+      <Button
+        type="text"
+        size="small"
+        icon={<DeleteOutlined />}
+        danger
+        style={{ opacity: 0.4 }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.4'; }}
+        onClick={(e) => { e.stopPropagation(); onDelete?.(record.id); }}
+      />
     ),
   };
 
