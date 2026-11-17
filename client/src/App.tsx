@@ -661,7 +661,7 @@ function App() {
               format={() => `${syncJob?.foldersDone || 0}/${syncJob?.foldersTotal || 0}`}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#595959', marginTop: 4 }}>
-              <span>{syncJob?.emailsSynced || 0} emails sincronizados{syncJob?.emailsRemoved ? ` · ${syncJob.emailsRemoved} removidos` : ''}</span>
+              <span>{syncJob?.emailsSynced || 0} novos/alterados{syncJob?.emailsRemoved ? ` · ${syncJob.emailsRemoved} removidos` : ''}</span>
               <span>{elapsedStr}</span>
             </div>
           </div>

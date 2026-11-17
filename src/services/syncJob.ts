@@ -137,6 +137,10 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
             }));
             for (const r of results) if (r?.created) newEmails.push(r.email);
           }
+          // Mid-folder update so UI reflects progress inside big folders
+          if (changed.length > 0) {
+            await updateJob(state.jobId, { emailsSynced: state.emailsSynced });
+          }
           // Fire archive rules for newly-created MS emails with attachments (best-effort, don't block)
           for (const em of newEmails) {
             if (!em.hasAttachments) continue;
