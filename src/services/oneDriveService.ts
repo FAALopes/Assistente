@@ -239,22 +239,40 @@ export async function ensureFolderPath(accountId: string, relativePath: string):
   const token = await getValidToken(accountId);
   const client = createClient(token);
   for (const part of parts) {
-    // Try fetch existing child by name
-    const children: any = await client
-      .api(`/me/drive/items/${parentId}/children`)
-      .filter(`name eq '${part.replace(/'/g, "''")}'`)
-      .select('id,name,folder')
-      .get();
-    const existing = (children.value || []).find((c: any) => c.folder);
-    if (existing) {
-      parentId = existing.id;
-    } else {
+    // $filter on children doesn't reliably work on OneDrive -> list page by page and match client-side (case-insensitive)
+    let found: string | null = null;
+    let url: string | null = `/me/drive/items/${parentId}/children`;
+    let first = true;
+    while (url && !found) {
+      let req = client.api(url);
+      if (first) { req = req.top(500).select('id,name,folder'); first = false; }
+      const resp: any = await req.get();
+      for (const c of (resp.value || [])) {
+        if (c.folder && String(c.name).toLowerCase() === part.toLowerCase()) { found = c.id; break; }
+      }
+      url = resp['@odata.nextLink'] || null;
+    }
+    if (found) {
+      parentId = found;
+      continue;
+    }
+    // Create — use 'fail' so a concurrent duplicate collides, then re-read to avoid rename-suffix folders
+    try {
       const created: any = await client.api(`/me/drive/items/${parentId}/children`).post({
         name: part,
         folder: {},
-        '@microsoft.graph.conflictBehavior': 'rename',
+        '@microsoft.graph.conflictBehavior': 'fail',
       });
       parentId = created.id;
+    } catch (e: any) {
+      const sc = e?.statusCode ?? e?.status;
+      const code = e?.code || e?.body?.error?.code || '';
+      if (sc === 409 || /conflict|nameAlreadyExists/i.test(code)) {
+        const existing: any = await client.api(`/me/drive/items/${parentId}:/${encodeURIComponent(part)}`).get();
+        parentId = existing.id;
+      } else {
+        throw e;
+      }
     }
   }
   return parentId;
