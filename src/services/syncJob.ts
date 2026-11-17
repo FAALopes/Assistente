@@ -82,8 +82,12 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
     state.errors.push(`${accountEmail}: list folders failed: ${e.message}`);
     return;
   }
-  for (const f of folders) {
-    await prisma.mailFolder.upsert({
+  // Parallelize upserts: thousands of folders at 1 roundtrip each stalls the whole job
+  const UPSERT_CHUNK = 20;
+  for (let i = 0; i < folders.length; i += UPSERT_CHUNK) {
+    if (await checkCancelled(state)) return;
+    const chunk = folders.slice(i, i + UPSERT_CHUNK);
+    await Promise.all(chunk.map(f => prisma.mailFolder.upsert({
       where: { accountId_id: { accountId, id: f.id } },
       create: {
         accountId, id: f.id, displayName: f.displayName, parentId: f.parentId,
@@ -94,7 +98,7 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
         displayName: f.displayName, parentId: f.parentId, path: f.path, depth: f.depth,
         wellKnownName: f.wellKnownName, totalItemCount: f.totalItemCount, unreadItemCount: f.unreadItemCount,
       },
-    });
+    })));
   }
   const serverIds = new Set(folders.map(f => f.id));
   const localFolders = await prisma.mailFolder.findMany({ where: { accountId }, select: { id: true } });
