@@ -44,28 +44,50 @@ async function updateJob(jobId: string, patch: Record<string, any>): Promise<voi
 }
 
 async function upsertEmail(accountId: string, folderId: string, g: any): Promise<{ created: boolean; email: any }> {
+  // Graph delta returns SPARSE updates: when an existing email is modified (eg isRead toggled),
+  // only {id, isRead} may come back. We must not overwrite from/subject/body with defaults.
+  const hasFrom = Object.prototype.hasOwnProperty.call(g, 'from');
+  const hasTo = Object.prototype.hasOwnProperty.call(g, 'toRecipients');
+  const hasSubject = Object.prototype.hasOwnProperty.call(g, 'subject');
+  const hasBody = Object.prototype.hasOwnProperty.call(g, 'bodyPreview');
+  const hasReceived = Object.prototype.hasOwnProperty.call(g, 'receivedDateTime');
+  const hasRead = Object.prototype.hasOwnProperty.call(g, 'isRead');
+  const hasImportance = Object.prototype.hasOwnProperty.call(g, 'importance');
+  const hasAttach = Object.prototype.hasOwnProperty.call(g, 'hasAttachments');
+
   const fromName = g.from?.emailAddress?.name || '';
-  const fromEmail = g.from?.emailAddress?.address || 'unknown';
-  const fromDisplay = fromName && fromName !== fromEmail ? `${fromName} <${fromEmail}>` : fromEmail;
+  const fromEmail = g.from?.emailAddress?.address || '';
+  const fromDisplay = fromEmail
+    ? (fromName && fromName !== fromEmail ? `${fromName} <${fromEmail}>` : fromEmail)
+    : null;
   const toAddress = g.toRecipients?.[0]?.emailAddress?.address || null;
+
   const existing = await prisma.email.findUnique({ where: { externalId: g.id }, select: { id: true } });
+
+  const updateData: any = { folder: folderId };
+  if (hasFrom && fromDisplay) updateData.from = fromDisplay;
+  if (hasTo) updateData.to = toAddress;
+  if (hasSubject) updateData.subject = g.subject || null;
+  if (hasBody) updateData.bodyPreview = g.bodyPreview || null;
+  if (hasRead) updateData.isRead = !!g.isRead;
+  if (hasImportance) updateData.importance = g.importance || null;
+  if (hasAttach) updateData.hasAttachments = !!g.hasAttachments;
+
   const email = await prisma.email.upsert({
     where: { externalId: g.id },
     create: {
-      externalId: g.id, accountId, from: fromDisplay, to: toAddress,
-      subject: g.subject || null, bodyPreview: g.bodyPreview || null,
+      externalId: g.id, accountId,
+      from: fromDisplay || 'unknown',
+      to: toAddress,
+      subject: hasSubject ? (g.subject || null) : null,
+      bodyPreview: hasBody ? (g.bodyPreview || null) : null,
       folder: folderId,
-      receivedAt: g.receivedDateTime ? new Date(g.receivedDateTime) : new Date(),
-      isRead: g.isRead || false, importance: g.importance || null,
-      hasAttachments: g.hasAttachments || false,
+      receivedAt: hasReceived && g.receivedDateTime ? new Date(g.receivedDateTime) : new Date(),
+      isRead: hasRead ? !!g.isRead : false,
+      importance: hasImportance ? (g.importance || null) : null,
+      hasAttachments: hasAttach ? !!g.hasAttachments : false,
     },
-    update: {
-      from: fromDisplay, to: toAddress,
-      subject: g.subject || null, bodyPreview: g.bodyPreview || null,
-      folder: folderId,
-      isRead: g.isRead || false, importance: g.importance || null,
-      hasAttachments: g.hasAttachments || false,
-    },
+    update: updateData,
   });
   return { created: !existing, email };
 }
