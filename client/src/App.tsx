@@ -12,6 +12,7 @@ import {
 import AccountList from './components/AccountList';
 import Archive from './components/Archive';
 import SaveAttachmentsSection from './components/SaveAttachmentsSection';
+import EmailBody from './components/EmailBody';
 import EmailList from './components/EmailList';
 import EmailActions from './components/EmailActions';
 import SuggestionBanner from './components/SuggestionBanner';
@@ -572,8 +573,8 @@ function App() {
                   {previewEmail.to && <div><strong>Para:</strong> {previewEmail.to}</div>}
                   <div><strong>Data:</strong> {new Date(previewEmail.receivedAt).toLocaleString('pt-PT')}</div>
                 </div>
-                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, fontSize: 13, lineHeight: 1.7, color: '#333', whiteSpace: 'pre-wrap' }}>
-                  {previewEmail.bodyPreview || 'Sem preview disponível'}
+                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+                  <EmailBody emailId={previewEmail.id} fallbackPreview={previewEmail.bodyPreview} />
                 </div>
                 {previewEmail.hasAttachments && (
                   <SaveAttachmentsSection email={previewEmail} />

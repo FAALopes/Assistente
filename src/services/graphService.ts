@@ -345,6 +345,17 @@ export interface DeltaResult {
  * Delta sync for a folder: returns only changes since last deltaLink.
  * On first call (no previous deltaLink) returns current state + a new deltaLink.
  */
+export async function fetchMessageBody(accessToken: string, messageId: string): Promise<{ contentType: 'html' | 'text'; content: string; subject?: string }> {
+  const client = createGraphClient(accessToken);
+  const msg: any = await client.api(`/me/messages/${messageId}`).select('id,subject,body').get();
+  const body = msg?.body || {};
+  return {
+    contentType: (body.contentType || '').toLowerCase() === 'html' ? 'html' : 'text',
+    content: body.content || '',
+    subject: msg?.subject || undefined,
+  };
+}
+
 export async function fetchFolderDelta(
   accessToken: string,
   folderId: string,

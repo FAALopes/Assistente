@@ -453,6 +453,11 @@ export async function deleteArchiveRule(id: string): Promise<void> {
   await api.delete(`/api/archive/rules/${id}`);
 }
 
+export async function getEmailBody(emailId: string): Promise<{ contentType: 'html' | 'text'; content: string }> {
+  const { data } = await api.get(`/api/emails/${emailId}/body`);
+  return data;
+}
+
 export async function getEmailAttachments(emailId: string): Promise<MailAttachment[]> {
   const { data } = await api.get(`/api/archive/attachments/${emailId}`);
   return data;

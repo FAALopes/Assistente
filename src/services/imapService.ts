@@ -425,6 +425,25 @@ export async function moveMessage(
   }
 }
 
+export async function fetchImapMessageBody(accountId: string, folder: string, uid: number): Promise<{ contentType: 'html' | 'text'; content: string }> {
+  const { simpleParser } = await import('mailparser');
+  const client = await openClient(accountId);
+  try {
+    const lock = await client.getMailboxLock(folder);
+    try {
+      const msg: any = await client.fetchOne(String(uid), { source: true }, { uid: true });
+      if (!msg?.source) return { contentType: 'text', content: '' };
+      const parsed = await simpleParser(msg.source as Buffer);
+      if (parsed.html) return { contentType: 'html', content: parsed.html };
+      return { contentType: 'text', content: parsed.text || '' };
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
 export async function deleteMessageByExternalId(accountId: string, externalId: string): Promise<void> {
   const parsed = parseExternalId(externalId);
   if (!parsed) throw new Error('Invalid IMAP externalId');

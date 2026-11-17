@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { EmailCategory, RuleAction } from '@prisma/client';
 import { prisma } from '../index';
 import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox } from '../services/mailService';
+import { getValidToken, fetchMessageBody } from '../services/graphService';
+import { fetchImapMessageBody, parseExternalId } from '../services/imapService';
 import { startSyncJob } from '../services/syncJob';
 import { learnFromAction } from '../services/ruleEngine';
 import { classifyJunkEmails, recordOverride, TriageActionType, TriageClassification } from '../services/triageService';
@@ -267,6 +269,33 @@ router.post('/bulk/delete', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/emails/:id - Delete email (move to trash via Graph)
+// GET /api/emails/:id/body - Fetch full body (HTML or text) on demand
+router.get('/:id/body', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const email = await prisma.email.findUnique({ where: { id }, include: { account: true } });
+    if (!email) { res.status(404).json({ error: 'Email not found' }); return; }
+
+    if (email.account.provider === 'MICROSOFT') {
+      const token = await getValidToken(email.accountId);
+      const body = await fetchMessageBody(token, email.externalId);
+      res.json(body);
+      return;
+    }
+    if (email.account.provider === 'IMAP') {
+      const parsed = parseExternalId(email.externalId);
+      if (!parsed) { res.status(400).json({ error: 'Invalid IMAP externalId' }); return; }
+      const body = await fetchImapMessageBody(email.accountId, parsed.folder, parsed.uid);
+      res.json(body);
+      return;
+    }
+    res.status(400).json({ error: 'Unsupported provider' });
+  } catch (e: any) {
+    console.error('Error fetching email body:', e);
+    res.status(500).json({ error: e?.message || 'Failed to fetch body' });
+  }
+});
+
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
