@@ -86,7 +86,11 @@ function Archive() {
   useEffect(() => { if (currentFolderId) load(currentFolderId); }, [currentFolderId, load]);
 
   const enterFolder = (it: ArchiveItem) => {
-    setPath((prev) => [...prev, { id: it.id, name: it.name }]);
+    setPath((prev) => {
+      // Guard against re-entering the same leaf (stale IDs or double-click)
+      if (prev.length > 0 && prev[prev.length - 1].id === it.id) return prev;
+      return [...prev, { id: it.id, name: it.name }];
+    });
     setSearchMode(false);
   };
 
