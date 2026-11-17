@@ -619,7 +619,10 @@ function App() {
         const pct = syncJob && syncJob.foldersTotal > 0
           ? Math.min(100, Math.round((syncJob.foldersDone / syncJob.foldersTotal) * 100))
           : 0;
-        const currentShort = syncJob?.currentFolder ? syncJob.currentFolder : (syncJob?.phase || 'A iniciar...');
+        const accountLine = syncJob?.accountsTotal
+          ? `Conta ${Math.min(syncJob.accountsDone + 1, syncJob.accountsTotal)} de ${syncJob.accountsTotal}${syncJob.currentAccount ? ` — ${syncJob.currentAccount}` : ''}`
+          : (syncJob?.currentFolder || syncJob?.phase || 'A iniciar...');
+        const folderLine = syncJob?.currentFolder || '';
         return (
           <div style={{
             position: 'fixed',
@@ -638,9 +641,14 @@ function App() {
               <SyncOutlined spin style={{ color: '#1677ff', fontSize: 18 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>A sincronizar emails</div>
-                <div style={{ fontSize: 12, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {currentShort}
+                <div style={{ fontSize: 12, color: '#595959', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {accountLine}
                 </div>
+                {folderLine && (
+                  <div style={{ fontSize: 11, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {folderLine}
+                  </div>
+                )}
               </div>
               {syncJobId && (
                 <Button size="small" danger onClick={handleCancelSync}>Cancelar</Button>

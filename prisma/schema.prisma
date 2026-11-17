@@ -104,6 +104,9 @@ model SyncJob {
   status        String   // queued | running | done | error
   phase         String?  // folders | emails | cleanup
   currentFolder String?
+  currentAccount String?
+  accountsTotal Int      @default(0)
+  accountsDone  Int      @default(0)
   foldersTotal  Int      @default(0)
   foldersDone   Int      @default(0)
   emailsSynced  Int      @default(0)

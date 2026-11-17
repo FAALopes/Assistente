@@ -61,6 +61,9 @@ export interface SyncJob {
   status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
   phase: string | null;
   currentFolder: string | null;
+  currentAccount: string | null;
+  accountsTotal: number;
+  accountsDone: number;
   foldersTotal: number;
   foldersDone: number;
   emailsSynced: number;

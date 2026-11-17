@@ -104,8 +104,14 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
   }
 
   // 2) Per-folder delta sync, in PARALLEL batches (Graph doesn't support account-wide delta)
-  const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
-  await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
+  // Correct the upfront estimate if the server has more folders than DB knew about
+  const prevLocalCount = localFolders.length;
+  if (folders.length > prevLocalCount) {
+    const job = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
+    await updateJob(state.jobId, { foldersTotal: (job?.foldersTotal || 0) + (folders.length - prevLocalCount), phase: 'emails' });
+  } else {
+    await updateJob(state.jobId, { phase: 'emails' });
+  }
 
   const CONCURRENCY = 6;
   const syncOneFolder = async (folder: FlatFolder) => {
@@ -214,11 +220,17 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
     await prisma.mailFolder.deleteMany({ where: { accountId, id: { in: toDrop } } });
   }
 
-  const prev = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
-  await updateJob(state.jobId, { phase: 'emails', foldersTotal: (prev?.foldersTotal || 0) + folders.length });
-  for (const folder of folders) {
+  const prevLocalCount = localFolders.length;
+  if (folders.length > prevLocalCount) {
+    const job = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
+    await updateJob(state.jobId, { foldersTotal: (job?.foldersTotal || 0) + (folders.length - prevLocalCount), phase: 'emails' });
+  } else {
+    await updateJob(state.jobId, { phase: 'emails' });
+  }
+
+  const IMAP_CONCURRENCY = 4;
+  const syncOneImapFolder = async (folder: ImapFlatFolder) => {
     if (await checkCancelled(state)) return;
-    await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
     try {
       const row = await prisma.mailFolder.findUnique({
         where: { accountId_id: { accountId, id: folder.path } },
@@ -227,11 +239,7 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
 
       // Cheap STATUS first: skip if nothing changed
       const status = await getFolderStatus(accountId, folder.path);
-      if (!status) {
-        state.foldersDone++;
-        await updateJob(state.jobId, { foldersDone: state.foldersDone });
-        continue;
-      }
+      if (!status) return;
 
       const storedUidValidity = row?.uidValidity ? Number(row.uidValidity) : 0;
       const uidValidityChanged = storedUidValidity && storedUidValidity !== status.uidValidity;
@@ -240,14 +248,13 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
       // Fast path: nothing new AND message count matches -> no fetch, no deletion scan
       const serverLastUid = Math.max(0, status.uidNext - 1);
       if (!uidValidityChanged && effectiveLastUid >= serverLastUid && status.messages === (row?.totalItemCount || 0)) {
-        state.foldersDone++;
-        await updateJob(state.jobId, { foldersDone: state.foldersDone });
-        continue;
+        return;
       }
 
-      // Fetch new since lastUid (or all if uidValidity changed)
+      // Only touch currentFolder when the folder actually needs work (avoids 8000+ no-op updates)
+      await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
+
       if (uidValidityChanged) {
-        // Nuke the local copy of this folder before full refetch
         await prisma.email.deleteMany({ where: { accountId, folder: folder.path } });
       }
       const { highestUid, uidValidity } = await fetchImapMessagesSince(
@@ -261,11 +268,9 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
               catch (e: any) { state.errors.push(`${folder.path}: upsert ${em.id}: ${e.message}`); }
             }));
           }
-          await updateJob(state.jobId, { emailsSynced: state.emailsSynced });
         },
       );
 
-      // Deletion detection: if server msg count diverges from local, reconcile via UID list
       const localCount = await prisma.email.count({ where: { accountId, folder: folder.path } });
       if (localCount !== status.messages) {
         const serverUids = new Set((await listAllImapUids(accountId, folder.path)).map(String));
@@ -281,7 +286,6 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
         if (stale.length > 0) {
           const res = await prisma.email.deleteMany({ where: { id: { in: stale } } });
           state.emailsRemoved += res.count;
-          await updateJob(state.jobId, { emailsRemoved: state.emailsRemoved });
         }
       }
 
@@ -298,8 +302,32 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
       state.errors.push(`${accountEmail} / ${folder.path}: ${e.message}`);
     }
     state.foldersDone++;
-    await updateJob(state.jobId, { foldersDone: state.foldersDone });
-  }
+    // Throttle UI updates: write every 10 folders or when something interesting happened
+    if (state.foldersDone % 10 === 0) {
+      await updateJob(state.jobId, {
+        foldersDone: state.foldersDone,
+        emailsSynced: state.emailsSynced,
+        emailsRemoved: state.emailsRemoved,
+      });
+    }
+  };
+
+  const queue = [...folders];
+  const workers = Array.from({ length: IMAP_CONCURRENCY }, async () => {
+    while (queue.length > 0) {
+      if (await checkCancelled(state)) return;
+      const folder = queue.shift();
+      if (!folder) return;
+      await syncOneImapFolder(folder);
+    }
+  });
+  await Promise.all(workers);
+  // Final flush so the UI sees the exact end state
+  await updateJob(state.jobId, {
+    foldersDone: state.foldersDone,
+    emailsSynced: state.emailsSynced,
+    emailsRemoved: state.emailsRemoved,
+  });
 }
 
 /**
@@ -354,8 +382,24 @@ export async function startSyncJob(accountId?: string): Promise<string> {
         const score = (p: string) => (p === 'MICROSOFT' ? 0 : 1);
         return score(a.provider) - score(b.provider);
       });
+
+      // Pre-compute total folders across all accounts so the progress bar is stable from the start
+      const folderCounts = await prisma.mailFolder.groupBy({
+        by: ['accountId'],
+        where: { accountId: { in: accounts.map(a => a.id) } },
+        _count: { id: true },
+      });
+      const totalFoldersEstimate = folderCounts.reduce((s, r) => s + r._count.id, 0);
+      await updateJob(job.id, {
+        foldersTotal: totalFoldersEstimate,
+        accountsTotal: accounts.length,
+        accountsDone: 0,
+      });
+
+      let accountsDone = 0;
       for (const acc of accounts) {
         if (state.cancelled) break;
+        await updateJob(job.id, { currentAccount: acc.email });
         try {
           if (acc.provider === 'MICROSOFT') {
             await syncMicrosoftAccount(state, acc.id, acc.email);
@@ -369,6 +413,8 @@ export async function startSyncJob(accountId?: string): Promise<string> {
         } catch (e: any) {
           state.errors.push(`${acc.email}: ${e.message}`);
         }
+        accountsDone++;
+        await updateJob(job.id, { accountsDone });
       }
       await updateJob(job.id, {
         status: state.cancelled ? 'cancelled' : 'done',
