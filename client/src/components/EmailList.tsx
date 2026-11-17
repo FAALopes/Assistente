@@ -55,15 +55,6 @@ const categoryColors: Record<EmailCategory, string> = {
   [EmailCategory.UNCATEGORIZED]: 'default',
 };
 
-const folderLabels: Record<string, string> = {
-  inbox: 'Inbox',
-  junkemail: 'E-mail de Lixo',
-  sentitems: 'Enviados',
-  drafts: 'Rascunhos',
-  deleteditems: 'Eliminados',
-  archive: 'Arquivo',
-};
-
 function EmailList({
   emails,
   accounts,
@@ -83,9 +74,6 @@ function EmailList({
   const suggestionMap = new Map(
     suggestions.map((s) => [s.emailId, s]),
   );
-
-  const accountMap = new Map(accounts.map((a) => [a.id, a]));
-  const folderMap = new Map(folders.map((f) => [f.id, f]));
 
   const handleCategoryChange = async (id: string, cat: EmailCategory) => {
     try {
@@ -200,7 +188,7 @@ function EmailList({
       title: 'De',
       dataIndex: 'from',
       key: 'from',
-      width: 220,
+      width: 180,
       ellipsis: true,
       sorter: true,
       sortOrder: filters.sortField === 'from' ? filters.sortOrder : undefined,
@@ -251,7 +239,7 @@ function EmailList({
       title: 'Categoria',
       dataIndex: 'category',
       key: 'category',
-      width: 160,
+      width: 130,
       render: (category: EmailCategory, record: Email) => (
         <Select
           size="small"
@@ -272,57 +260,24 @@ function EmailList({
       ),
     },
     {
-      title: 'Data Receb',
+      title: 'Data',
       dataIndex: 'receivedAt',
       key: 'receivedAt',
-      width: 130,
+      width: 95,
       sorter: true,
       sortOrder: filters.sortField === 'receivedAt' ? filters.sortOrder : undefined,
       defaultSortOrder: !filters.sortField ? 'descend' as const : undefined,
-      render: (date: string) =>
-        new Date(date).toLocaleString('pt-PT', {
-          day: '2-digit',
-          month: '2-digit',
-          year: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-    },
-    {
-      title: 'Pasta',
-      dataIndex: 'folder',
-      key: 'folder',
-      width: 160,
-      ellipsis: true,
-      render: (folder: string) => {
-        const colorMap: Record<string, string> = {
-          inbox: 'blue',
-          junkemail: 'red',
-          sentitems: 'green',
-          drafts: 'orange',
-          deleteditems: 'default',
-          archive: 'purple',
-        };
-        const f = folderMap.get(folder);
-        const wk = f?.wellKnownName || folder;
-        const label = f?.label || folderLabels[folder] || folder;
+      render: (date: string) => {
+        const d = new Date(date);
+        const now = new Date();
+        const sameDay = d.toDateString() === now.toDateString();
         return (
-          <Tag color={colorMap[wk] || 'default'} style={{ maxWidth: '100%' }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-          </Tag>
+          <span style={{ fontSize: 11, color: '#595959' }}>
+            {sameDay
+              ? d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
+              : d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+          </span>
         );
-      },
-    },
-    {
-      title: 'Conta',
-      dataIndex: 'accountId',
-      key: 'account',
-      width: 180,
-      ellipsis: true,
-      render: (accountId: string) => {
-        const account = accountMap.get(accountId);
-        if (!account) return '-';
-        return <span style={{ fontSize: 12 }}>{account.email}</span>;
       },
     },
     actionsColumn,
@@ -399,7 +354,7 @@ function EmailList({
         dataSource={emails}
         columns={columns}
         rowKey="id"
-        size="middle"
+        size="small"
         rowSelection={{
           selectedRowKeys: selectedIds,
           onChange: (keys) => onSelectionChange(keys as string[]),

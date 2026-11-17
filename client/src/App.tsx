@@ -498,38 +498,45 @@ function App() {
                 />
               </Spin>
             </div>
-            {previewEmail && (
-              <div style={{
-                width: 380,
-                flexShrink: 0,
-                background: '#fff',
-                borderRadius: 8,
-                padding: 16,
-                border: '1px solid #f0f0f0',
-                overflow: 'auto',
-                maxHeight: 'calc(100vh - 140px)',
-                position: 'sticky',
-                top: 80,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <Title level={5} style={{ margin: 0, flex: 1 }}>
-                    {previewEmail.subject || '(sem assunto)'}
-                  </Title>
-                  <Button type="text" size="small" onClick={() => setPreviewEmail(null)} style={{ marginLeft: 8 }}>✕</Button>
+            <div style={{
+              width: 'min(44vw, 560px)',
+              minWidth: 380,
+              flexShrink: 0,
+              background: '#fff',
+              borderRadius: 8,
+              padding: previewEmail ? 14 : 16,
+              border: '1px solid #f0f0f0',
+              overflow: 'auto',
+              maxHeight: 'calc(100vh - 140px)',
+              position: 'sticky',
+              top: 80,
+            }}>
+              {previewEmail ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <Title level={5} style={{ margin: 0, flex: 1, fontSize: 15, lineHeight: 1.3 }}>
+                      {previewEmail.subject || '(sem assunto)'}
+                    </Title>
+                    <Button type="text" size="small" onClick={() => setPreviewEmail(null)} style={{ marginLeft: 8 }}>✕</Button>
+                  </div>
+                  <div style={{ marginBottom: 8, fontSize: 12, color: '#595959', lineHeight: 1.5 }}>
+                    <div><strong>De:</strong> {previewEmail.from}</div>
+                    {previewEmail.to && <div><strong>Para:</strong> {previewEmail.to}</div>}
+                    <div><strong>Data:</strong> {new Date(previewEmail.receivedAt).toLocaleString('pt-PT')}</div>
+                  </div>
+                  <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
+                    <EmailBody emailId={previewEmail.id} fallbackPreview={previewEmail.bodyPreview} />
+                  </div>
+                  {previewEmail.hasAttachments && (
+                    <SaveAttachmentsSection email={previewEmail} />
+                  )}
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#bfbfbf', paddingTop: 80, fontSize: 13 }}>
+                  Selecciona um email para pre-visualizar
                 </div>
-                <div style={{ marginBottom: 12, fontSize: 13, color: '#595959' }}>
-                  <div><strong>De:</strong> {previewEmail.from}</div>
-                  {previewEmail.to && <div><strong>Para:</strong> {previewEmail.to}</div>}
-                  <div><strong>Data:</strong> {new Date(previewEmail.receivedAt).toLocaleString('pt-PT')}</div>
-                </div>
-                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
-                  <EmailBody emailId={previewEmail.id} fallbackPreview={previewEmail.bodyPreview} />
-                </div>
-                {previewEmail.hasAttachments && (
-                  <SaveAttachmentsSection email={previewEmail} />
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
           </>
           )}
