@@ -467,3 +467,8 @@ export async function saveAttachmentsToArchive(emailId: string, parentId: string
   const { data } = await api.post('/api/archive/save-attachments', { emailId, parentId });
   return data;
 }
+
+export async function applyArchiveRulesToEmail(emailId: string): Promise<{ saved: number; ruleIds: string[] }> {
+  const { data } = await api.post(`/api/archive/apply-rules/${emailId}`);
+  return data;
+}

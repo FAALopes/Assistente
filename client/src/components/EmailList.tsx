@@ -6,8 +6,9 @@ import {
   ThunderboltOutlined,
   PlusOutlined,
   EditOutlined,
+  FolderAddOutlined,
 } from '@ant-design/icons';
-import { matchEmailAction, updateCategory } from '../api';
+import { matchEmailAction, updateCategory, applyArchiveRulesToEmail } from '../api';
 import DefineActionModal from './DefineActionModal';
 import type { EmailAction } from '../types';
 import type { ColumnsType } from 'antd/es/table';
@@ -486,6 +487,41 @@ function EmailList({
             onClick={handleDefineAction}
           >
             <PlusOutlined /> {matchedAction ? 'Definir outra ação...' : 'Definir ação...'}
+          </div>
+          <div style={{ height: 1, background: '#f0f0f0', margin: '4px 0' }} />
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: 'pointer',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={async () => {
+              if (!ctxMenu) return;
+              const emailId = ctxMenu.email.id;
+              setCtxMenu(null);
+              const key = 'apply-rules';
+              message.loading({ content: 'A aplicar regras...', key });
+              try {
+                const r = await applyArchiveRulesToEmail(emailId);
+                if (r.saved === 0 && r.ruleIds.length === 0) {
+                  message.info({ content: 'Nenhuma regra corresponde a este email', key, duration: 3 });
+                } else if (r.saved === 0) {
+                  message.warning({ content: 'Regras combinaram, mas sem anexos para arquivar', key, duration: 4 });
+                } else {
+                  message.success({ content: `${r.saved} ficheiro(s) arquivado(s)`, key });
+                }
+              } catch (e: any) {
+                message.error({ content: e?.response?.data?.error || e.message, key, duration: 5 });
+              }
+            }}
+          >
+            <FolderAddOutlined style={{ color: '#52c41a' }} /> Aplicar regras de arquivo
           </div>
         </div>
       )}

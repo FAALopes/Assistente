@@ -12,7 +12,6 @@ import {
   listAllImapUids,
   type ImapFlatFolder,
 } from './imapService';
-import { applyArchiveRulesToEmail } from './archiveService';
 
 interface JobState {
   jobId: string;
@@ -167,11 +166,7 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
           if (changed.length > 0) {
             await updateJob(state.jobId, { emailsSynced: state.emailsSynced });
           }
-          // Fire archive rules for newly-created MS emails with attachments (best-effort, don't block)
-          for (const em of newEmails) {
-            if (!em.hasAttachments) continue;
-            applyArchiveRulesToEmail(em).catch(e => state.errors.push(`archive rules: ${e.message}`));
-          }
+          // Archive rules are applied manually (context menu), not automatically here
           if (deleted.length > 0) {
             const res = await prisma.email.deleteMany({ where: { externalId: { in: deleted } } });
             state.emailsRemoved += res.count;

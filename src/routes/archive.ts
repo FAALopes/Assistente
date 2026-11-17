@@ -14,7 +14,7 @@ import {
   ensureFolderPath,
 } from '../services/oneDriveService';
 import { listAttachments, getAttachmentBytes } from '../services/graphAttachments';
-import { upsertArchiveItem } from '../services/archiveService';
+import { upsertArchiveItem, applyArchiveRulesToEmail } from '../services/archiveService';
 
 const router = Router();
 const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } });
@@ -342,6 +342,27 @@ router.post('/save-attachments', async (req: Request, res: Response) => {
     }
     res.json({ saved: saved.length, items: saved });
   } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/archive/apply-rules/:emailId — run archive rules manually against one email
+router.post('/apply-rules/:emailId', async (req: Request, res: Response) => {
+  try {
+    const email = await prisma.email.findUnique({ where: { id: (req.params.emailId as string) } });
+    if (!email) { res.status(404).json({ error: 'Email not found' }); return; }
+    const result = await applyArchiveRulesToEmail({
+      id: email.id,
+      accountId: email.accountId,
+      externalId: email.externalId,
+      from: email.from,
+      subject: email.subject,
+      hasAttachments: email.hasAttachments,
+      receivedAt: email.receivedAt,
+    });
+    res.json(result);
+  } catch (e: any) {
+    console.error('apply-rules failed:', e);
     res.status(500).json({ error: e.message });
   }
 });
