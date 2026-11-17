@@ -369,7 +369,7 @@ function EmailList({
             // Don't trigger on checkbox, button or select clicks
             const target = e.target as HTMLElement;
             if (target.closest('.ant-checkbox-wrapper') || target.closest('.ant-btn') || target.closest('.ant-select')) return;
-            onSelectEmail?.(selectedEmailId === record.id ? null : record);
+            onSelectEmail?.(record);
           },
           onContextMenu: (e) => {
             e.preventDefault();
