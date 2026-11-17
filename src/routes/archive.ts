@@ -25,8 +25,23 @@ function q(v: unknown): string | undefined {
   return undefined;
 }
 
-// Resolve default MS account (the first one). For now the archive uses it.
+// Resolve default MS account: prefer a personal Microsoft account (Hotmail/Outlook/Live),
+// since corporate M365 tenants often don't have OneDrive provisioned for the user.
 async function getDefaultMsAccount(): Promise<string | null> {
+  const personal = await prisma.emailAccount.findFirst({
+    where: {
+      provider: 'MICROSOFT',
+      OR: [
+        { email: { endsWith: '@hotmail.com', mode: 'insensitive' } },
+        { email: { endsWith: '@outlook.com', mode: 'insensitive' } },
+        { email: { endsWith: '@live.com', mode: 'insensitive' } },
+        { email: { endsWith: '@hotmail.pt', mode: 'insensitive' } },
+        { email: { endsWith: '@outlook.pt', mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (personal) return personal.id;
   const acc = await prisma.emailAccount.findFirst({
     where: { provider: 'MICROSOFT' },
     orderBy: { createdAt: 'asc' },
