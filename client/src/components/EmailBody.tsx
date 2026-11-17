@@ -61,7 +61,7 @@ export default function EmailBody({ emailId, fallbackPreview }: { emailId: strin
     return (
       <iframe
         ref={iframeRef}
-        sandbox="allow-same-origin allow-popups"
+        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         style={{ width: '100%', border: 'none', background: '#fff' }}
         title="Email body"
       />
