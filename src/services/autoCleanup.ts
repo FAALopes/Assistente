@@ -8,13 +8,28 @@ const AUTO_DELETE_CONFIDENCE_THRESHOLD = 85;
 // How often to run auto-cleanup (1 hour)
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
-// Resolve the actual junk folder id for an account (post-sync it's a Graph id or IMAP path)
-async function resolveJunkFolderId(accountId: string): Promise<string> {
-  const row = await prisma.mailFolder.findFirst({
+// Resolve the actual junk folder id for an account (post-sync it's a Graph id or IMAP path).
+// Graph doesn't always set wellKnownName on localized folders (eg hotmail.com in PT returns
+// "E-mail de Lixo" with no wellKnownName) — fall back to displayName heuristics.
+async function resolveJunkFolderId(accountId: string): Promise<string | null> {
+  const byWk = await prisma.mailFolder.findFirst({
     where: { accountId, wellKnownName: 'junkemail' },
     select: { id: true },
   });
-  return row?.id || 'junkemail';
+  if (byWk) return byWk.id;
+  const byName = await prisma.mailFolder.findFirst({
+    where: {
+      accountId,
+      OR: [
+        { displayName: { contains: 'junk', mode: 'insensitive' } },
+        { displayName: { contains: 'lixo', mode: 'insensitive' } },
+        { displayName: { contains: 'spam', mode: 'insensitive' } },
+      ],
+      parentId: null, // top-level only, don't match random user subfolders
+    },
+    select: { id: true },
+  });
+  return byName?.id || null;
 }
 
 interface CleanupResult {
@@ -36,6 +51,10 @@ async function cleanupAccount(accountId: string, accountEmail: string): Promise<
 
   try {
     const JUNK_FOLDER = await resolveJunkFolderId(accountId);
+    if (!JUNK_FOLDER) {
+      // No junk folder known yet — skip this account until the sync creates it
+      return result;
+    }
     // 1. Sync junk folder to get latest emails
     const graphEmails = await mailFetchEmails(accountId, 'junkemail');
     const serverIds = new Set(graphEmails.map(e => e.id));
