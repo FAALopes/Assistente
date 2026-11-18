@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../index';
+import { resolveFolderId } from '../services/folderResolver';
 
 const router = Router();
 
@@ -12,37 +13,15 @@ router.get('/triage-stats', async (_req: Request, res: Response) => {
 
     const byAccount: any[] = [];
     for (const acc of accounts) {
-      const total = await prisma.email.count({
-        where: { accountId: acc.id, folder: 'junkemail' },
-      });
-      const uncached = await prisma.email.count({
-        where: { accountId: acc.id, folder: 'junkemail', triageAction: null },
-      });
-      const failed = await prisma.email.count({
-        where: { accountId: acc.id, folder: 'junkemail', triageConfidence: 0 },
-      });
-      const deleteHigh = await prisma.email.count({
-        where: {
-          accountId: acc.id,
-          folder: 'junkemail',
-          triageAction: 'DELETE',
-          triageConfidence: { gte: 85 },
-        },
-      });
-      const deleteLow = await prisma.email.count({
-        where: {
-          accountId: acc.id,
-          folder: 'junkemail',
-          triageAction: 'DELETE',
-          triageConfidence: { lt: 85, gt: 0 },
-        },
-      });
-      const review = await prisma.email.count({
-        where: { accountId: acc.id, folder: 'junkemail', triageAction: 'REVIEW' },
-      });
-      const moveInbox = await prisma.email.count({
-        where: { accountId: acc.id, folder: 'junkemail', triageAction: 'MOVE_TO_INBOX' },
-      });
+      const junkId = await resolveFolderId(acc.id, 'junkemail');
+      const base = junkId ? { accountId: acc.id, folder: junkId } : { accountId: acc.id, folder: '__none__' };
+      const total = await prisma.email.count({ where: base });
+      const uncached = await prisma.email.count({ where: { ...base, triageAction: null } });
+      const failed = await prisma.email.count({ where: { ...base, triageConfidence: 0 } });
+      const deleteHigh = await prisma.email.count({ where: { ...base, triageAction: 'DELETE', triageConfidence: { gte: 85 } } });
+      const deleteLow = await prisma.email.count({ where: { ...base, triageAction: 'DELETE', triageConfidence: { lt: 85, gt: 0 } } });
+      const review = await prisma.email.count({ where: { ...base, triageAction: 'REVIEW' } });
+      const moveInbox = await prisma.email.count({ where: { ...base, triageAction: 'MOVE_TO_INBOX' } });
 
       byAccount.push({
         accountId: acc.id,
@@ -176,8 +155,15 @@ router.post('/reset-failed-triage', async (_req: Request, res: Response) => {
 // POST /api/diagnostics/reset-all-junk-triage - One-shot: reset ALL junk classifications for re-run
 router.post('/reset-all-junk-triage', async (_req: Request, res: Response) => {
   try {
+    const accounts = await prisma.emailAccount.findMany({ select: { id: true } });
+    const junkIds: string[] = [];
+    for (const a of accounts) {
+      const id = await resolveFolderId(a.id, 'junkemail');
+      if (id) junkIds.push(id);
+    }
+    if (junkIds.length === 0) { res.json({ reset: 0 }); return; }
     const result = await prisma.email.updateMany({
-      where: { folder: 'junkemail' },
+      where: { folder: { in: junkIds } },
       data: {
         triageAction: null,
         triageReason: null,

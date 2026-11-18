@@ -4,6 +4,7 @@ import { prisma } from '../index';
 import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox } from '../services/mailService';
 import { getValidToken, fetchMessageBody } from '../services/graphService';
 import { fetchImapMessageBody, parseExternalId } from '../services/imapService';
+import { resolveFolderId, resolveFolderIdForAccounts } from '../services/folderResolver';
 import { startSyncJob } from '../services/syncJob';
 import { learnFromAction } from '../services/ruleEngine';
 import { classifyJunkEmails, recordOverride, TriageActionType, TriageClassification } from '../services/triageService';
@@ -351,10 +352,11 @@ router.post('/:id/move-to-inbox', async (req: Request, res: Response) => {
       return;
     }
 
-    // Update folder in local DB
+    // Update folder in local DB to the account's REAL inbox id (not the literal 'inbox')
+    const inboxId = await resolveFolderId(email.accountId, 'inbox');
     await prisma.email.update({
       where: { id },
-      data: { folder: 'inbox', triageAction: null, triageReason: null, triageConfidence: null, triageClassifiedAt: null },
+      data: { folder: inboxId || email.folder, triageAction: null, triageReason: null, triageConfidence: null, triageClassifiedAt: null },
     });
 
     res.json({ message: 'Email moved to inbox' });
@@ -369,7 +371,17 @@ router.post('/triage', async (req: Request, res: Response) => {
   try {
     const { accountId, forceReclassify } = req.body;
 
-    const where: any = { folder: 'junkemail' };
+    // Resolve each account's real junk folder id (Hotmail PT etc. have no wellKnownName)
+    const accountIds = accountId
+      ? [accountId]
+      : (await prisma.emailAccount.findMany({ select: { id: true } })).map(a => a.id);
+    const junkByAccount = await resolveFolderIdForAccounts(accountIds, 'junkemail');
+    const junkFolderIds = Array.from(junkByAccount.values());
+    if (junkFolderIds.length === 0) {
+      res.json({ classifications: [], total: 0, fromCache: 0, newlyClassified: 0 });
+      return;
+    }
+    const where: any = { folder: { in: junkFolderIds } };
     if (accountId) where.accountId = accountId;
 
     const junkEmails = await prisma.email.findMany({
@@ -499,12 +511,17 @@ router.post('/triage/execute', async (req: Request, res: Response) => {
         include: { account: true },
       });
 
+      const inboxIds = await resolveFolderIdForAccounts(
+        Array.from(new Set(emails.map(e => e.accountId))),
+        'inbox'
+      );
       for (const email of emails) {
         try {
           await mailMoveToInbox(email.accountId, email.externalId);
+          const inboxId = inboxIds.get(email.accountId);
           await prisma.email.update({
             where: { id: email.id },
-            data: { folder: 'inbox' },
+            data: { folder: inboxId || email.folder },
           });
         } catch (err: any) {
           errors.push(`Move failed for ${email.from}: ${err.message}`);
