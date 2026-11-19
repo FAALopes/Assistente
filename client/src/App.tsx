@@ -535,12 +535,12 @@ function App() {
                     {previewEmail.to && <div><strong>Para:</strong> {previewEmail.to}</div>}
                     <div><strong>Data:</strong> {new Date(previewEmail.receivedAt).toLocaleString('pt-PT')}</div>
                   </div>
+                  {previewEmail.hasAttachments && (
+                    <SaveAttachmentsSection key={previewEmail.id} email={previewEmail} />
+                  )}
                   <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
                     <EmailBody emailId={previewEmail.id} fallbackPreview={previewEmail.bodyPreview} />
                   </div>
-                  {previewEmail.hasAttachments && (
-                    <SaveAttachmentsSection email={previewEmail} />
-                  )}
                 </>
               ) : (
                 <div style={{ textAlign: 'center', color: '#bfbfbf', paddingTop: 80, fontSize: 13 }}>

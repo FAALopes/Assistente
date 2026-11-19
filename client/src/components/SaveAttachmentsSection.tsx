@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Button, Modal, Breadcrumb, List, Input, message, Space, Tag } from 'antd';
-import { CloudUploadOutlined, FolderOutlined, FolderAddOutlined } from '@ant-design/icons';
+import { Button, Modal, Breadcrumb, List, Input, message } from 'antd';
+import {
+  CloudUploadOutlined, FolderOutlined, FolderAddOutlined,
+  FilePdfOutlined, FileWordOutlined, FileExcelOutlined, FilePptOutlined, FileImageOutlined,
+  FileZipOutlined, FileTextOutlined, FileOutlined, MailOutlined, CalendarOutlined,
+} from '@ant-design/icons';
 import {
   getEmailAttachments,
   saveAttachmentsToArchive,
@@ -11,6 +15,31 @@ import {
   type ArchiveItem,
 } from '../api';
 import type { Email } from '../types';
+
+type IconType = typeof FileOutlined;
+
+// File-type icon + colour, by extension first and content type as fallback.
+function fileIcon(name: string, contentType: string): { Icon: IconType; color: string } {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const ct = (contentType || '').toLowerCase();
+  if (ext === 'pdf' || ct.includes('pdf')) return { Icon: FilePdfOutlined, color: '#d4380d' };
+  if (['doc', 'docx', 'dot', 'dotx', 'odt', 'rtf'].includes(ext) || ct.includes('word')) return { Icon: FileWordOutlined, color: '#1d5fbf' };
+  if (['xls', 'xlsx', 'xlsm', 'xlsb', 'csv', 'ods'].includes(ext) || ct.includes('excel') || ct.includes('spreadsheet')) return { Icon: FileExcelOutlined, color: '#1e7e45' };
+  if (['ppt', 'pptx', 'pps', 'ppsx', 'odp'].includes(ext) || ct.includes('powerpoint') || ct.includes('presentation')) return { Icon: FilePptOutlined, color: '#c8501e' };
+  if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'heic', 'tif', 'tiff'].includes(ext) || ct.startsWith('image/')) return { Icon: FileImageOutlined, color: '#8a4fc7' };
+  if (['zip', 'rar', '7z', 'gz', 'tar'].includes(ext) || ct.includes('zip') || ct.includes('compressed')) return { Icon: FileZipOutlined, color: '#b8860b' };
+  if (['eml', 'msg'].includes(ext) || ct.includes('rfc822')) return { Icon: MailOutlined, color: '#1677ff' };
+  if (ext === 'ics' || ct.includes('calendar')) return { Icon: CalendarOutlined, color: '#1677ff' };
+  if (['txt', 'xml', 'json', 'html', 'htm', 'md', 'log'].includes(ext) || ct.startsWith('text/')) return { Icon: FileTextOutlined, color: '#595959' };
+  return { Icon: FileOutlined, color: '#8c8c8c' };
+}
+
+function formatSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+}
 
 export default function SaveAttachmentsSection({ email }: { email: Email }) {
   const [atts, setAtts] = useState<MailAttachment[]>([]);
@@ -82,13 +111,36 @@ export default function SaveAttachmentsSection({ email }: { email: Email }) {
   if (atts.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
-      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 6 }}>Anexos ({atts.length})</div>
-      <Space wrap size={[4, 4]}>
-        {atts.map((a) => <Tag key={a.id}>{a.name}</Tag>)}
-      </Space>
-      <div style={{ marginTop: 10 }}>
-        <Button type="primary" icon={<CloudUploadOutlined />} onClick={openPicker} size="small">
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'stretch' }}>
+        {atts.map((a) => {
+          const { Icon, color } = fileIcon(a.name, a.contentType);
+          const size = formatSize(a.size);
+          return (
+            <div
+              key={a.id}
+              title={a.name}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '5px 10px 5px 8px',
+                border: '1px solid #e8e8e8',
+                borderRadius: 4,
+                background: '#fafafa',
+                maxWidth: 240,
+                minWidth: 0,
+              }}
+            >
+              <Icon style={{ fontSize: 22, color, flexShrink: 0 }} />
+              <div style={{ minWidth: 0, lineHeight: 1.25 }}>
+                <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                {size && <div style={{ fontSize: 11, color: '#8c8c8c' }}>{size}</div>}
+              </div>
+            </div>
+          );
+        })}
+        <Button icon={<CloudUploadOutlined />} onClick={openPicker} size="small" style={{ alignSelf: 'center' }}>
           Guardar no Arquivo
         </Button>
       </div>
