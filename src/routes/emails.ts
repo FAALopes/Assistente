@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { RuleAction } from '@prisma/client';
 import { isValidCategory } from '../services/categories';
 import { prisma } from '../index';
-import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox } from '../services/mailService';
+import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, moveEmailToFolder as mailMoveToFolder } from '../services/mailService';
 import { getValidToken, fetchMessageBody } from '../services/graphService';
 import { fetchImapMessageBody, parseExternalId } from '../services/imapService';
 import { resolveFolderId, resolveFolderIdForAccounts } from '../services/folderResolver';
@@ -362,6 +362,60 @@ router.post('/:id/move-to-inbox', async (req: Request, res: Response) => {
     });
 
     res.json({ message: 'Email moved to inbox' });
+  } catch (error) {
+    console.error('Error moving email:', error);
+    res.status(500).json({ error: 'Failed to move email' });
+  }
+});
+
+// POST /api/emails/:id/move - Move email to any folder of its own account. Body: { folderId }
+router.post('/:id/move', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const folderId = req.body?.folderId;
+    if (!folderId || typeof folderId !== 'string') {
+      res.status(400).json({ error: 'folderId is required' });
+      return;
+    }
+
+    const email = await prisma.email.findUnique({ where: { id } });
+    if (!email) {
+      res.status(404).json({ error: 'Email not found' });
+      return;
+    }
+    const target = await prisma.mailFolder.findUnique({
+      where: { accountId_id: { accountId: email.accountId, id: folderId } },
+    });
+    if (!target) {
+      res.status(400).json({ error: 'A pasta de destino não pertence à conta deste email' });
+      return;
+    }
+    if (email.folder === folderId) {
+      res.json({ moved: false, folder: target.displayName });
+      return;
+    }
+
+    let newExternalId: string | null;
+    try {
+      newExternalId = await mailMoveToFolder(email.accountId, email.externalId, folderId);
+    } catch (moveError: any) {
+      console.error('Move error:', moveError?.message);
+      res.status(502).json({ error: `O servidor de email recusou mover: ${moveError?.message || 'erro'}` });
+      return;
+    }
+
+    const cleared = { triageAction: null, triageReason: null, triageConfidence: null, triageClassifiedAt: null };
+    if (newExternalId) {
+      await prisma.email.update({ where: { id }, data: { folder: folderId, externalId: newExternalId, ...cleared } });
+    } else if (email.externalId.startsWith('imap:')) {
+      // IMAP server did not report the new UID: the old id is dead, so drop the local row;
+      // the next sync of the destination folder brings the message back with its new id.
+      await prisma.email.delete({ where: { id } });
+    } else {
+      await prisma.email.update({ where: { id }, data: { folder: folderId, ...cleared } });
+    }
+
+    res.json({ moved: true, folder: target.displayName });
   } catch (error) {
     console.error('Error moving email:', error);
     res.status(500).json({ error: 'Failed to move email' });

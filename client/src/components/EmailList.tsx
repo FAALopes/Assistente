@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Tag, Input, Select, Space, Button, message } from 'antd';
+import { Table, Tag, Input, Select, Space, Button, Modal, message } from 'antd';
 import {
   SearchOutlined,
   DeleteOutlined,
@@ -7,8 +7,9 @@ import {
   PlusOutlined,
   EditOutlined,
   FolderAddOutlined,
+  FolderOpenOutlined,
 } from '@ant-design/icons';
-import { matchEmailAction, updateCategory, applyArchiveRulesToEmail } from '../api';
+import { matchEmailAction, updateCategory, applyArchiveRulesToEmail, moveEmailToFolder } from '../api';
 import DefineActionModal from './DefineActionModal';
 import type { EmailAction } from '../types';
 import type { ColumnsType } from 'antd/es/table';
@@ -18,6 +19,7 @@ import type {
   Email,
   EmailAccount,
   EmailFolder,
+  FoldersByAccount,
   Suggestion,
   EmailFilters,
 } from '../types';
@@ -38,6 +40,8 @@ interface EmailListProps {
   selectedEmailId?: string | null;
   onRefresh?: () => void;
   onManageCategories?: () => void;
+  foldersByAccount?: FoldersByAccount;
+  onMoved?: () => void;
 }
 
 function EmailList({
@@ -56,6 +60,8 @@ function EmailList({
   selectedEmailId,
   onRefresh,
   onManageCategories,
+  foldersByAccount,
+  onMoved,
 }: EmailListProps) {
   const categories = useCategories();
   const suggestionMap = new Map(
@@ -76,6 +82,30 @@ function EmailList({
   const [matchLoading, setMatchLoading] = useState(false);
   const [defineModalEmail, setDefineModalEmail] = useState<Email | null>(null);
   const [editingAction, setEditingAction] = useState<EmailAction | null>(null);
+  const [moveEmail, setMoveEmail] = useState<Email | null>(null);
+  const [moving, setMoving] = useState(false);
+
+  const moveOptions = moveEmail
+    ? (foldersByAccount?.[moveEmail.accountId] || [])
+        .filter((f) => f.id !== moveEmail.folder)
+        .map((f) => ({ value: f.id, label: f.path || f.label }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt'))
+    : [];
+
+  const handleMove = async (folderId: string) => {
+    if (!moveEmail) return;
+    setMoving(true);
+    try {
+      const r = await moveEmailToFolder(moveEmail.id, folderId);
+      message.success(`Movido para "${r.folder}"`);
+      setMoveEmail(null);
+      onMoved?.();
+    } catch (e: any) {
+      message.error(e?.response?.data?.error || 'Erro ao mover email', 5);
+    } finally {
+      setMoving(false);
+    }
+  };
 
   useEffect(() => {
     if (!ctxMenu) {
@@ -498,6 +528,26 @@ function EmailList({
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            onClick={() => {
+              if (!ctxMenu) return;
+              setMoveEmail(ctxMenu.email);
+              setCtxMenu(null);
+            }}
+          >
+            <FolderOpenOutlined style={{ color: '#faad14' }} /> Mover para pasta...
+          </div>
+          <div
+            style={{
+              padding: '8px 12px',
+              cursor: 'pointer',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             onClick={async () => {
               if (!ctxMenu) return;
               const emailId = ctxMenu.email.id;
@@ -522,6 +572,37 @@ function EmailList({
           </div>
         </div>
       )}
+
+      <Modal
+        title="Mover para pasta"
+        open={moveEmail !== null}
+        onCancel={() => setMoveEmail(null)}
+        footer={null}
+        destroyOnClose
+        width={520}
+      >
+        {moveEmail && (
+          <>
+            <div style={{ fontSize: 12, color: '#595959', marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {moveEmail.subject || '(sem assunto)'}
+            </div>
+            <Select
+              showSearch
+              autoFocus
+              defaultOpen
+              style={{ width: '100%' }}
+              placeholder="Escrever para procurar a pasta..."
+              options={moveOptions}
+              optionFilterProp="label"
+              loading={moving}
+              disabled={moving}
+              onChange={(val) => handleMove(val as string)}
+              notFoundContent="Nenhuma pasta encontrada"
+              listHeight={320}
+            />
+          </>
+        )}
+      </Modal>
 
       <DefineActionModal
         open={defineModalEmail !== null}

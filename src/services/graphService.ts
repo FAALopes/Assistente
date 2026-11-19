@@ -463,7 +463,9 @@ export async function fetchAccountDelta(
 /**
  * Move an email to a specific folder by id.
  */
-export async function moveEmailToFolder(accessToken: string, emailId: string, destinationFolderId: string): Promise<void> {
+export async function moveEmailToFolder(accessToken: string, emailId: string, destinationFolderId: string): Promise<string | null> {
   const client = createGraphClient(accessToken);
-  await client.api(`/me/messages/${emailId}/move`).post({ destinationId: destinationFolderId });
+  // Graph gives the message a NEW id in the destination folder; return it so the caller can keep its row in sync.
+  const moved: any = await client.api(`/me/messages/${emailId}/move`).post({ destinationId: destinationFolderId });
+  return moved?.id || null;
 }

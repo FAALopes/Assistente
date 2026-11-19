@@ -411,12 +411,16 @@ export async function moveMessage(
   fromFolder: string,
   uid: number,
   toFolder: string,
-): Promise<void> {
+): Promise<number | null> {
   const client = await openClient(accountId);
   try {
     const lock = await client.getMailboxLock(fromFolder);
     try {
-      await client.messageMove(String(uid), toFolder, { uid: true });
+      const r: any = await client.messageMove(String(uid), toFolder, { uid: true });
+      if (r === false) throw new Error('O servidor IMAP recusou mover a mensagem');
+      // With UIDPLUS the server tells us the UID in the destination folder
+      const newUid = r?.uidMap?.get?.(uid);
+      return typeof newUid === 'number' ? newUid : null;
     } finally {
       lock.release();
     }

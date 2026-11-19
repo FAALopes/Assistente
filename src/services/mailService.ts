@@ -64,3 +64,23 @@ export async function moveEmailToInbox(accountId: string, externalId: string): P
     return imap.moveToInboxByExternalId(accountId, externalId);
   }
 }
+
+/**
+ * Move a message to any folder of its account (folderId = MailFolder.id: Graph folder id or IMAP path).
+ * Returns the message's new externalId when the server reports it, otherwise null.
+ */
+export async function moveEmailToFolder(accountId: string, externalId: string, folderId: string): Promise<string | null> {
+  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+  if (!acc) throw new Error('Account not found');
+  if (acc.provider === 'MICROSOFT') {
+    const token = await graph.getValidToken(accountId);
+    return graph.moveEmailToFolder(token, externalId, folderId);
+  }
+  if (acc.provider === 'IMAP') {
+    const parsed = imap.parseExternalId(externalId);
+    if (!parsed) throw new Error('Invalid IMAP externalId');
+    const newUid = await imap.moveMessage(accountId, parsed.folder, parsed.uid, folderId);
+    return newUid !== null ? imap.buildExternalId(accountId, folderId, newUid) : null;
+  }
+  throw new Error('Provider not supported');
+}

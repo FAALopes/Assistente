@@ -507,3 +507,8 @@ export async function deleteCategory(key: string): Promise<{ deleted: boolean; e
   const { data } = await api.delete(`/api/categories/${encodeURIComponent(key)}`);
   return data;
 }
+
+export async function moveEmailToFolder(id: string, folderId: string): Promise<{ moved: boolean; folder: string }> {
+  const { data } = await api.post(`/api/emails/${id}/move`, { folderId });
+  return data;
+}

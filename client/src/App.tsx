@@ -507,6 +507,11 @@ function App() {
                   selectedEmailId={previewEmail?.id || null}
                   onRefresh={fetchEmails}
                   onManageCategories={() => setCategoriesOpen(true)}
+                  foldersByAccount={foldersByAccount}
+                  onMoved={() => {
+                    fetchEmails();
+                    fetchFolders();
+                  }}
                 />
               </Spin>
             </div>
