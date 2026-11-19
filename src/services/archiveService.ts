@@ -43,6 +43,36 @@ function applyFilenamePattern(pattern: string, ctx: { date: string; entity?: str
     .replace(/\{ext\}/g, ctx.ext);
 }
 
+const EXT_BY_MIME: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/zip': 'zip',
+  'application/xml': 'xml',
+  'text/xml': 'xml',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
+
+/** Extension of an attachment: from its name, else from its content type, else '' (never invented). */
+export function attachmentExt(name: string, contentType?: string | null): string {
+  const m = name.match(/\.([A-Za-z0-9]{1,8})$/);
+  if (m) return m[1];
+  return EXT_BY_MIME[(contentType || '').split(';')[0].trim().toLowerCase()] || '';
+}
+
+/** A saved file must keep its extension even when the rule's name pattern forgets {ext}. */
+export function withExt(name: string, ext: string): string {
+  if (!ext) return name;
+  return name.toLowerCase().endsWith(`.${ext.toLowerCase()}`) ? name : `${name}.${ext}`;
+}
+
 /**
  * Match an incoming email against archive rules and auto-save attachments.
  * Returns number of files saved.
@@ -84,17 +114,20 @@ export async function applyArchiveRulesToEmail(email: {
     for (const att of fileAtts) {
       try {
         const { buffer, contentType, name: originalName } = await getAttachmentBytes(email.accountId, email.externalId, att.id);
-        const ext = (originalName.match(/\.([^.]+)$/) || ['', 'bin'])[1];
+        const ext = attachmentExt(originalName, contentType);
         const date = email.receivedAt.toISOString().slice(0, 10);
-        const finalName = rule.filenamePattern
-          ? applyFilenamePattern(rule.filenamePattern, {
-              date,
-              entity: rule.entity?.name,
-              subject: email.subject || undefined,
-              original: originalName,
-              ext,
-            })
-          : originalName;
+        const finalName = withExt(
+          rule.filenamePattern
+            ? applyFilenamePattern(rule.filenamePattern, {
+                date,
+                entity: rule.entity?.name,
+                subject: email.subject || undefined,
+                original: originalName,
+                ext,
+              })
+            : originalName,
+          ext,
+        );
         const uploaded = await uploadFile(email.accountId, folderId, finalName, buffer, contentType);
         await upsertArchiveItem(email.accountId, uploaded, `${rule.targetFolder}/${uploaded.name}`, email.id);
         if (rule.entityId) {

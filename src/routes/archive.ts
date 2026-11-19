@@ -14,7 +14,7 @@ import {
   ensureFolderPath,
 } from '../services/oneDriveService';
 import { listAttachments, getAttachmentBytes } from '../services/graphAttachments';
-import { upsertArchiveItem, applyArchiveRulesToEmail } from '../services/archiveService';
+import { upsertArchiveItem, applyArchiveRulesToEmail, attachmentExt, withExt } from '../services/archiveService';
 
 const router = Router();
 const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } });
@@ -23,6 +23,11 @@ function q(v: unknown): string | undefined {
   if (typeof v === 'string') return v;
   if (Array.isArray(v) && typeof v[0] === 'string') return v[0] as string;
   return undefined;
+}
+
+// ArchiveItem.size is a BigInt, which res.json cannot serialize (it throws) — send it as a number.
+function metaOut<T extends { size: bigint | null }>(m: T): Omit<T, 'size'> & { size: number | null } {
+  return { ...m, size: m.size === null ? null : Number(m.size) };
 }
 
 // Resolve default MS account: prefer a personal Microsoft account (Hotmail/Outlook/Live),
@@ -82,7 +87,7 @@ router.get('/folder/:id', async (req: Request, res: Response) => {
       where: { accountId, driveItemId: { in: items.map(i => i.id) } },
       include: { entity: true },
     });
-    const metaMap = new Map(meta.map(m => [m.driveItemId, m]));
+    const metaMap = new Map(meta.map(m => [m.driveItemId, metaOut(m)]));
     const out = items.map((it) => ({
       ...it,
       meta: metaMap.get(it.id) || null,
@@ -208,7 +213,7 @@ router.get('/search', async (req: Request, res: Response) => {
       },
       include: { entity: true },
     });
-    res.json({ drive, meta });
+    res.json({ drive, meta: meta.map(metaOut) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -333,7 +338,7 @@ router.post('/save-attachments', async (req: Request, res: Response) => {
     for (const a of files) {
       try {
         const { buffer, contentType, name } = await getAttachmentBytes(email.accountId, email.externalId, a.id);
-        const uploaded = await uploadFile(email.accountId, parentId, name, buffer, contentType);
+        const uploaded = await uploadFile(email.accountId, parentId, withExt(name, attachmentExt(name, contentType)), buffer, contentType);
         await upsertArchiveItem(email.accountId, uploaded, uploaded.name, email.id);
         saved.push(uploaded);
       } catch (e: any) {
