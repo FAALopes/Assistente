@@ -8,6 +8,7 @@ import {
   AppstoreOutlined,
   KeyOutlined,
   LogoutOutlined,
+  TagsOutlined,
 } from '@ant-design/icons';
 import AccountList from './components/AccountList';
 import Archive from './components/Archive';
@@ -22,6 +23,8 @@ import RulePreviewModal from './components/RulePreviewModal';
 import RecentApplicationsBanner from './components/RecentApplicationsBanner';
 import EmailActionsPanel from './components/EmailActionsPanel';
 import ConfigPanel from './components/ConfigPanel';
+import CategoriesPanel from './components/CategoriesPanel';
+import { reloadCategories } from './categories';
 import { getAccounts, getEmails, getFoldersByAccount, syncEmails, getSyncStatus, cancelSyncJob, getSuggestions, deleteEmail, previewRuleApplication, applyRules, getRecentApplications, logout } from './api';
 import type {
   EmailAccount,
@@ -53,6 +56,7 @@ function App() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [triageOpen, setTriageOpen] = useState(false);
   const [rulePreviewOpen, setRulePreviewOpen] = useState(false);
   const [rulePreviewData, setRulePreviewData] = useState<RulePreviewResult | null>(null);
@@ -125,6 +129,7 @@ function App() {
     fetchFolders();
     fetchSuggestions();
     fetchRecentApplications();
+    reloadCategories().catch(() => message.error('Erro ao carregar categorias'));
   }, [fetchAccounts, fetchFolders, fetchSuggestions, fetchRecentApplications]);
 
   useEffect(() => {
@@ -418,6 +423,12 @@ function App() {
               Ações
             </Button>
             <Button
+              icon={<TagsOutlined />}
+              onClick={() => setCategoriesOpen(true)}
+            >
+              Categorias
+            </Button>
+            <Button
               icon={<SettingOutlined />}
               onClick={() => setRulesOpen(true)}
             >
@@ -495,6 +506,7 @@ function App() {
                   onSelectEmail={setPreviewEmail}
                   selectedEmailId={previewEmail?.id || null}
                   onRefresh={fetchEmails}
+                  onManageCategories={() => setCategoriesOpen(true)}
                 />
               </Spin>
             </div>
@@ -549,6 +561,11 @@ function App() {
         accounts={accounts}
       />
       <ConfigPanel open={configOpen} onClose={() => setConfigOpen(false)} />
+      <CategoriesPanel
+        open={categoriesOpen}
+        onClose={() => setCategoriesOpen(false)}
+        onChanged={fetchEmails}
+      />
       <TriagePanel
         open={triageOpen}
         onClose={() => setTriageOpen(false)}

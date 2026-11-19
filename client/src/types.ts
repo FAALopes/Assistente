@@ -1,10 +1,30 @@
-export enum EmailCategory {
-  INBOX = 'INBOX',
-  TODO = 'TODO',
-  DELETE = 'DELETE',
-  SAVE_LATER = 'SAVE_LATER',
-  SAVE_ONEDRIVE = 'SAVE_ONEDRIVE',
-  UNCATEGORIZED = 'UNCATEGORIZED',
+// Built-in category keys (used by rules/bulk actions). Custom categories have other keys,
+// so an email's category is just a string: the Category.key.
+export const EmailCategory = {
+  INBOX: 'INBOX',
+  TODO: 'TODO',
+  DELETE: 'DELETE',
+  SAVE_LATER: 'SAVE_LATER',
+  SAVE_ONEDRIVE: 'SAVE_ONEDRIVE',
+  UNCATEGORIZED: 'UNCATEGORIZED',
+} as const;
+export type EmailCategory = string;
+
+export interface Category {
+  key: string;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+  builtin: boolean;
+  emailCount?: number;
+}
+
+export interface CategoryEmail {
+  id: string;
+  from: string;
+  subject: string | null;
+  receivedAt: string;
+  account?: { email: string };
 }
 
 export interface EmailAccount {

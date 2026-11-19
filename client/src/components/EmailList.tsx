@@ -13,6 +13,7 @@ import DefineActionModal from './DefineActionModal';
 import type { EmailAction } from '../types';
 import type { ColumnsType } from 'antd/es/table';
 import { EmailCategory } from '../types';
+import { useCategories, categoryName, ColoredTag } from '../categories';
 import type {
   Email,
   EmailAccount,
@@ -36,25 +37,8 @@ interface EmailListProps {
   onSelectEmail?: (email: Email | null) => void;
   selectedEmailId?: string | null;
   onRefresh?: () => void;
+  onManageCategories?: () => void;
 }
-
-const categoryLabels: Record<EmailCategory, string> = {
-  [EmailCategory.INBOX]: 'Caixa de entrada',
-  [EmailCategory.TODO]: 'Tratar depois',
-  [EmailCategory.DELETE]: 'Apagar',
-  [EmailCategory.SAVE_LATER]: 'Guardar',
-  [EmailCategory.SAVE_ONEDRIVE]: 'OneDrive',
-  [EmailCategory.UNCATEGORIZED]: 'Sem categoria',
-};
-
-const categoryColors: Record<EmailCategory, string> = {
-  [EmailCategory.INBOX]: 'default',
-  [EmailCategory.TODO]: 'blue',
-  [EmailCategory.DELETE]: 'red',
-  [EmailCategory.SAVE_LATER]: 'green',
-  [EmailCategory.SAVE_ONEDRIVE]: 'cyan',
-  [EmailCategory.UNCATEGORIZED]: 'default',
-};
 
 function EmailList({
   emails,
@@ -71,7 +55,9 @@ function EmailList({
   onSelectEmail,
   selectedEmailId,
   onRefresh,
+  onManageCategories,
 }: EmailListProps) {
+  const categories = useCategories();
   const suggestionMap = new Map(
     suggestions.map((s) => [s.emailId, s]),
   );
@@ -229,7 +215,7 @@ function EmailList({
             </span>
             {suggestion && (
               <Tag color="orange" style={{ fontSize: 11 }}>
-                Sugestao: {categoryLabels[suggestion.suggestedCategory]}
+                Sugestao: {categoryName(categories, suggestion.suggestedCategory)}
               </Tag>
             )}
           </Space>
@@ -247,16 +233,27 @@ function EmailList({
           variant="borderless"
           value={category}
           style={{ width: '100%' }}
+          popupMatchSelectWidth={false}
           onClick={(e) => e.stopPropagation()}
           onChange={(val) => handleCategoryChange(record.id, val as EmailCategory)}
-          options={Object.values(EmailCategory).map((cat) => ({
-            value: cat,
-            label: (
-              <Tag color={categoryColors[cat]} style={{ margin: 0 }}>
-                {categoryLabels[cat]}
-              </Tag>
-            ),
+          options={categories.map((cat) => ({
+            value: cat.key,
+            label: <ColoredTag name={cat.name} color={cat.color} />,
           }))}
+          dropdownRender={(menu) => (
+            <>
+              {menu}
+              {onManageCategories && (
+                <div
+                  style={{ borderTop: '1px solid #f0f0f0', marginTop: 4, padding: '6px 12px', fontSize: 12, color: '#1677ff', cursor: 'pointer' }}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onManageCategories()}
+                >
+                  Gerir categorias...
+                </div>
+              )}
+            </>
+          )}
         />
       ),
     },
@@ -284,9 +281,9 @@ function EmailList({
     actionsColumn,
   ];
 
-  const categoryOptions = Object.values(EmailCategory).map((cat) => ({
-    value: cat,
-    label: categoryLabels[cat],
+  const categoryOptions = categories.map((cat) => ({
+    value: cat.key,
+    label: cat.name,
   }));
 
   const folderOptions = folders.map((f) => ({

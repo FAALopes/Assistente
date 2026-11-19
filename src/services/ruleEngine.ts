@@ -1,4 +1,6 @@
-import { Email, Rule, EmailCategory, RuleField, RuleOperator, RuleAction } from '@prisma/client';
+import { Email, Rule, RuleField, RuleOperator, RuleAction } from '@prisma/client';
+
+type EmailCategory = string;
 import { prisma } from '../index';
 
 export interface EmailSuggestion {

@@ -13,15 +13,6 @@ enum Provider {
   IMAP
 }
 
-enum EmailCategory {
-  INBOX
-  DELETE
-  TODO
-  SAVE_LATER
-  SAVE_ONEDRIVE
-  UNCATEGORIZED
-}
-
 enum RuleField {
   FROM
   SUBJECT
@@ -134,7 +125,7 @@ model Email {
   isRead         Boolean       @default(false)
   importance     String?
   hasAttachments Boolean       @default(false)
-  category       EmailCategory @default(UNCATEGORIZED)
+  category       String        @default("UNCATEGORIZED") // Category.key (built-in or custom)
   categorySetAt  DateTime?
   triageAction   TriageAction?
   triageReason   String?
@@ -147,6 +138,19 @@ model Email {
   @@index([receivedAt])
   @@index([folder])
   @@map("emails")
+}
+
+// User-defined categories + overrides (name/color/order) of the built-in ones.
+// Built-in keys live in src/services/categories.ts; a row here with the same key overrides them.
+model Category {
+  key       String   @id
+  name      String
+  color     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("categories")
 }
 
 model TriageOverride {
@@ -267,8 +271,8 @@ model RuleApplication {
   id               String        @id @default(uuid())
   emailId          String
   ruleId           String
-  previousCategory EmailCategory
-  newCategory      EmailCategory
+  previousCategory String
+  newCategory      String
   appliedAt        DateTime      @default(now())
   reverted         Boolean       @default(false)
   revertedAt       DateTime?

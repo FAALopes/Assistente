@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import { bulkUpdateCategory } from '../api';
 import { EmailCategory } from '../types';
+import { CategoryTag } from '../categories';
 import type { Suggestion, Email } from '../types';
 
 const { Text } = Typography;
@@ -16,24 +17,6 @@ interface SuggestionBannerProps {
   emails: Email[];
   onApply: (applied: { emailId: string; category: EmailCategory }[]) => void;
 }
-
-const categoryLabels: Record<EmailCategory, string> = {
-  [EmailCategory.INBOX]: 'Caixa de entrada',
-  [EmailCategory.TODO]: 'Tratar depois',
-  [EmailCategory.DELETE]: 'Apagar',
-  [EmailCategory.SAVE_LATER]: 'Guardar',
-  [EmailCategory.SAVE_ONEDRIVE]: 'OneDrive',
-  [EmailCategory.UNCATEGORIZED]: 'Sem categoria',
-};
-
-const categoryColors: Record<EmailCategory, string> = {
-  [EmailCategory.INBOX]: 'default',
-  [EmailCategory.TODO]: 'blue',
-  [EmailCategory.DELETE]: 'red',
-  [EmailCategory.SAVE_LATER]: 'green',
-  [EmailCategory.SAVE_ONEDRIVE]: 'cyan',
-  [EmailCategory.UNCATEGORIZED]: 'default',
-};
 
 function SuggestionBanner({ suggestions, emails, onApply }: SuggestionBannerProps) {
   const [expanded, setExpanded] = useState(false);
@@ -87,9 +70,7 @@ function SuggestionBanner({ suggestions, emails, onApply }: SuggestionBannerProp
             <List.Item>
               <div style={{ width: '100%' }}>
                 <Space>
-                  <Tag color={categoryColors[suggestion.suggestedCategory]}>
-                    {categoryLabels[suggestion.suggestedCategory]}
-                  </Tag>
+                  <CategoryTag categoryKey={suggestion.suggestedCategory} />
                   <Text strong>{email?.from || 'Desconhecido'}</Text>
                   <Text type="secondary">
                     {email?.subject || '(sem assunto)'}

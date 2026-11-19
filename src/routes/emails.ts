@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { EmailCategory, RuleAction } from '@prisma/client';
+import { RuleAction } from '@prisma/client';
+import { isValidCategory } from '../services/categories';
 import { prisma } from '../index';
 import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox } from '../services/mailService';
 import { getValidToken, fetchMessageBody } from '../services/graphService';
@@ -40,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (category && typeof category === 'string') {
-      where.category = category as EmailCategory;
+      where.category = category;
     }
 
     if (search && typeof search === 'string') {
@@ -159,11 +160,8 @@ router.patch('/:id/category', async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const { category } = req.body;
 
-    if (!category || !Object.values(EmailCategory).includes(category)) {
-      res.status(400).json({
-        error: 'Invalid category',
-        validCategories: Object.values(EmailCategory),
-      });
+    if (!category || typeof category !== 'string' || !(await isValidCategory(category))) {
+      res.status(400).json({ error: 'Invalid category' });
       return;
     }
 
@@ -176,7 +174,7 @@ router.patch('/:id/category', async (req: Request, res: Response) => {
     const updated = await prisma.email.update({
       where: { id },
       data: {
-        category: category as EmailCategory,
+        category,
         categorySetAt: new Date(),
       },
     });
@@ -218,6 +216,10 @@ router.patch('/bulk/category', async (req: Request, res: Response) => {
 
     if (!ids || !Array.isArray(ids) || !category) {
       res.status(400).json({ error: 'ids (array) and category are required' });
+      return;
+    }
+    if (typeof category !== 'string' || !(await isValidCategory(category))) {
+      res.status(400).json({ error: 'Invalid category' });
       return;
     }
 

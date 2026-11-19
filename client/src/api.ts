@@ -15,6 +15,8 @@ import type {
   RecentApplicationsResult,
   EmailAction,
   EmailActionMatch,
+  Category,
+  CategoryEmail,
 } from './types';
 
 const api = axios.create({
@@ -470,5 +472,38 @@ export async function saveAttachmentsToArchive(emailId: string, parentId: string
 
 export async function applyArchiveRulesToEmail(emailId: string): Promise<{ saved: number; ruleIds: string[] }> {
   const { data } = await api.post(`/api/archive/apply-rules/${emailId}`);
+  return data;
+}
+
+// ---- Categories (definitions) ----
+export async function getCategories(): Promise<Category[]> {
+  const { data } = await api.get<Category[]>('/api/categories');
+  return data;
+}
+
+export async function createCategory(body: { name: string; color: string | null }): Promise<Category> {
+  const { data } = await api.post<Category>('/api/categories', body);
+  return data;
+}
+
+export async function updateCategoryDef(
+  key: string,
+  body: { name?: string; color?: string | null },
+): Promise<Category> {
+  const { data } = await api.put<Category>(`/api/categories/${encodeURIComponent(key)}`, body);
+  return data;
+}
+
+export async function reorderCategories(keys: string[]): Promise<void> {
+  await api.put('/api/categories/order', { keys });
+}
+
+export async function getCategoryEmails(key: string): Promise<{ total: number; emails: CategoryEmail[] }> {
+  const { data } = await api.get(`/api/categories/${encodeURIComponent(key)}/emails`);
+  return data;
+}
+
+export async function deleteCategory(key: string): Promise<{ deleted: boolean; emailsReset: number }> {
+  const { data } = await api.delete(`/api/categories/${encodeURIComponent(key)}`);
   return data;
 }

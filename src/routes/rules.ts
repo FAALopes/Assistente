@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { RuleField, RuleOperator, RuleAction, EmailCategory } from '@prisma/client';
+import { RuleField, RuleOperator, RuleAction } from '@prisma/client';
+
+type EmailCategory = string;
 import { prisma } from '../index';
 import { applySuggestions } from '../services/ruleEngine';
 

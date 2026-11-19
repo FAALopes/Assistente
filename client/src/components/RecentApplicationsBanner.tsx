@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Alert, Button, List, Tag, Space, Typography, message, Modal } from 'antd';
+import { Alert, Button, List, Space, Typography, message, Modal } from 'antd';
 import { UndoOutlined, CheckOutlined, HistoryOutlined } from '@ant-design/icons';
-import type { RuleApplicationRecord, EmailCategory } from '../types';
+import type { RuleApplicationRecord } from '../types';
+import { CategoryTag } from '../categories';
 import { revertApplication, acknowledgeApplications } from '../api';
 
 const { Text } = Typography;
@@ -10,24 +11,6 @@ interface Props {
   applications: RuleApplicationRecord[];
   onRefresh: () => void;
 }
-
-const categoryLabels: Record<EmailCategory, string> = {
-  INBOX: 'Caixa de entrada',
-  TODO: 'Tratar depois',
-  DELETE: 'Apagar',
-  SAVE_LATER: 'Guardar',
-  SAVE_ONEDRIVE: 'OneDrive',
-  UNCATEGORIZED: 'Sem categoria',
-};
-
-const categoryColors: Record<EmailCategory, string> = {
-  INBOX: 'default',
-  TODO: 'blue',
-  DELETE: 'red',
-  SAVE_LATER: 'green',
-  SAVE_ONEDRIVE: 'cyan',
-  UNCATEGORIZED: 'default',
-};
 
 function RecentApplicationsBanner({ applications, onRefresh }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -119,13 +102,9 @@ function RecentApplicationsBanner({ applications, onRefresh }: Props) {
                     <Text style={{ fontSize: 13 }}>
                       {app.email?.subject || '(sem assunto)'}
                     </Text>
-                    <Tag color={categoryColors[app.previousCategory]} style={{ fontSize: 10 }}>
-                      {categoryLabels[app.previousCategory]}
-                    </Tag>
+                    <CategoryTag categoryKey={app.previousCategory} style={{ fontSize: 10 }} />
                     <span style={{ color: '#8c8c8c' }}>→</span>
-                    <Tag color={categoryColors[app.newCategory]} style={{ fontSize: 10 }}>
-                      {categoryLabels[app.newCategory]}
-                    </Tag>
+                    <CategoryTag categoryKey={app.newCategory} style={{ fontSize: 10 }} />
                   </Space>
                 }
                 description={
