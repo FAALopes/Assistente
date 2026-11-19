@@ -395,7 +395,7 @@ function App() {
               onClick={() => setTab('archive')}
               style={{ fontWeight: 600 }}
             >
-              Arquivo
+              OneDrive
             </Button>
           </Space>
           <Space>

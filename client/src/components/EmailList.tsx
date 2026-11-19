@@ -509,16 +509,16 @@ function EmailList({
                 if (r.saved === 0 && r.ruleIds.length === 0) {
                   message.info({ content: 'Nenhuma regra corresponde a este email', key, duration: 3 });
                 } else if (r.saved === 0) {
-                  message.warning({ content: 'Regras combinaram, mas sem anexos para arquivar', key, duration: 4 });
+                  message.warning({ content: 'Regras combinaram, mas sem anexos para guardar', key, duration: 4 });
                 } else {
-                  message.success({ content: `${r.saved} ficheiro(s) arquivado(s)`, key });
+                  message.success({ content: `${r.saved} ficheiro(s) guardado(s) no OneDrive`, key });
                 }
               } catch (e: any) {
                 message.error({ content: e?.response?.data?.error || e.message, key, duration: 5 });
               }
             }}
           >
-            <FolderAddOutlined style={{ color: '#52c41a' }} /> Aplicar regras de arquivo
+            <FolderAddOutlined style={{ color: '#52c41a' }} /> Aplicar regras do OneDrive
           </div>
         </div>
       )}

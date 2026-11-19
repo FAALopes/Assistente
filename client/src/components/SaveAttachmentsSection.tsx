@@ -141,7 +141,7 @@ export default function SaveAttachmentsSection({ email }: { email: Email }) {
           );
         })}
         <Button icon={<CloudUploadOutlined />} onClick={openPicker} size="small" style={{ alignSelf: 'center' }}>
-          Guardar no Arquivo
+          Guardar no OneDrive
         </Button>
       </div>
 
@@ -156,7 +156,7 @@ export default function SaveAttachmentsSection({ email }: { email: Email }) {
       >
         <Breadcrumb
           items={[
-            { title: <a onClick={() => navCrumb(-1)}>Arquivo</a> },
+            { title: <a onClick={() => navCrumb(-1)}>OneDrive</a> },
             ...path.map((p, i) => ({ title: <a onClick={() => navCrumb(i)}>{p.name}</a> })),
           ]}
         />

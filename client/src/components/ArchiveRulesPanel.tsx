@@ -51,7 +51,7 @@ export default function ArchiveRulesPanel({ open, onClose, entities }: { open: b
   };
 
   return (
-    <Drawer open={open} onClose={onClose} title="Regras de arquivo automatico" width={560} extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNew}>Nova</Button>}>
+    <Drawer open={open} onClose={onClose} title="Regras do OneDrive" width={560} extra={<Button type="primary" icon={<PlusOutlined />} onClick={openNew}>Nova</Button>}>
       <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 12 }}>
         Emails novos com anexos sao verificados contra as regras. Quando ha match, os anexos vao para a pasta indicada em OneDrive (criada se nao existir).
       </div>

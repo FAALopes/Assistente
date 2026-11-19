@@ -77,7 +77,7 @@ function Archive() {
         const { rootId } = await getArchiveRoot();
         setRootId(rootId);
       } catch (e: any) {
-        message.error(`Nao foi possivel abrir o Arquivo: ${e.response?.data?.error || e.message}. Pode ser preciso re-autorizar a conta Microsoft.`);
+        message.error(`Nao foi possivel abrir o OneDrive: ${e.response?.data?.error || e.message}. Pode ser preciso re-autorizar a conta Microsoft.`);
       }
     })();
     getArchiveEntities().then(setEntities).catch(() => {});
@@ -246,7 +246,7 @@ function Archive() {
       <div style={{ background: '#fff', padding: '12px 16px', borderRadius: 8, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <Breadcrumb
           items={[
-            { title: <a onClick={() => navigateCrumb(-1)}>Arquivo</a> },
+            { title: <a onClick={() => navigateCrumb(-1)}>OneDrive</a> },
             ...path.map((p, i) => ({ title: <a onClick={() => navigateCrumb(i)}>{p.name}</a> })),
             ...(searchMode ? [{ title: `Pesquisa: "${searchQ}"` }] : []),
           ]}
