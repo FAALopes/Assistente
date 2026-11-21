@@ -96,6 +96,7 @@ function EmailList({
   const [editingAction, setEditingAction] = useState<EmailAction | null>(null);
   const [moveEmail, setMoveEmail] = useState<Email | null>(null);
   const [moving, setMoving] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<string | undefined>(undefined);
 
   // Folder tree of every mailbox: the email can go to any folder of this or another account
   const SEP = '';
@@ -574,6 +575,7 @@ function EmailList({
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             onClick={() => {
               if (!ctxMenu) return;
+              setMoveTarget(undefined);
               setMoveEmail(ctxMenu.email);
               setCtxMenu(null);
             }}
@@ -621,7 +623,11 @@ function EmailList({
         title="Enviar para pasta"
         open={moveEmail !== null}
         onCancel={() => setMoveEmail(null)}
-        footer={null}
+        okText="OK"
+        cancelText="Cancelar"
+        okButtonProps={{ disabled: !moveTarget, loading: moving }}
+        cancelButtonProps={{ disabled: moving }}
+        onOk={() => moveTarget && handleMove(moveTarget)}
         destroyOnClose
         width={520}
       >
@@ -641,7 +647,8 @@ function EmailList({
               treeDefaultExpandedKeys={[`acc${SEP}${moveEmail.accountId}`]}
               loading={moving}
               disabled={moving}
-              onChange={(val) => handleMove(val as string)}
+              value={moveTarget}
+              onChange={(val) => setMoveTarget(val as string)}
               notFoundContent="Nenhuma pasta encontrada"
               listHeight={400}
             />
