@@ -598,7 +598,7 @@ function App() {
           ? Math.min(100, Math.round((syncJob.foldersDone / syncJob.foldersTotal) * 100))
           : 0;
         const accountLine = syncJob?.accountsTotal
-          ? `Conta ${Math.min(syncJob.accountsDone + 1, syncJob.accountsTotal)} de ${syncJob.accountsTotal}${syncJob.currentAccount ? ` — ${syncJob.currentAccount}` : ''}`
+          ? `${syncJob.accountsDone} de ${syncJob.accountsTotal} contas concluídas${syncJob.currentAccount ? ` — em curso: ${syncJob.currentAccount}` : ''}`
           : (syncJob?.currentFolder || syncJob?.phase || 'A iniciar...');
         const folderLine = syncJob?.currentFolder || '';
         return (

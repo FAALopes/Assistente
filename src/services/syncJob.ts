@@ -132,8 +132,8 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
   // Correct the upfront estimate if the server has more folders than DB knew about
   const prevLocalCount = localFolders.length;
   if (folders.length > prevLocalCount) {
-    const job = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
-    await updateJob(state.jobId, { foldersTotal: (job?.foldersTotal || 0) + (folders.length - prevLocalCount), phase: 'emails' });
+    // Atomic increment: several accounts sync in parallel and may hit this at the same time
+    await updateJob(state.jobId, { foldersTotal: { increment: folders.length - prevLocalCount }, phase: 'emails' });
   } else {
     await updateJob(state.jobId, { phase: 'emails' });
   }
@@ -247,8 +247,8 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
 
   const prevLocalCount = localFolders.length;
   if (folders.length > prevLocalCount) {
-    const job = await prisma.syncJob.findUnique({ where: { id: state.jobId }, select: { foldersTotal: true } });
-    await updateJob(state.jobId, { foldersTotal: (job?.foldersTotal || 0) + (folders.length - prevLocalCount), phase: 'emails' });
+    // Atomic increment: several accounts sync in parallel and may hit this at the same time
+    await updateJob(state.jobId, { foldersTotal: { increment: folders.length - prevLocalCount }, phase: 'emails' });
   } else {
     await updateJob(state.jobId, { phase: 'emails' });
   }
@@ -421,10 +421,15 @@ export async function startSyncJob(accountId?: string): Promise<string> {
         accountsDone: 0,
       });
 
+      // All mailboxes sync at the same time (like Outlook's send/receive): each account
+      // talks to a different server, so total time ~ the slowest account, not the sum.
       let accountsDone = 0;
-      for (const acc of accounts) {
-        if (state.cancelled) break;
-        await updateJob(job.id, { currentAccount: acc.email });
+      const active = new Set<string>();
+      const showActive = () => updateJob(job.id, { currentAccount: [...active].join(', ') || null });
+      await Promise.all(accounts.map(async (acc) => {
+        if (state.cancelled) return;
+        active.add(acc.email);
+        await showActive();
         try {
           if (acc.provider === 'MICROSOFT') {
             await syncMicrosoftAccount(state, acc.id, acc.email);
@@ -438,9 +443,10 @@ export async function startSyncJob(accountId?: string): Promise<string> {
         } catch (e: any) {
           state.errors.push(`${acc.email}: ${e.message}`);
         }
+        active.delete(acc.email);
         accountsDone++;
-        await updateJob(job.id, { accountsDone });
-      }
+        await updateJob(job.id, { accountsDone, currentAccount: [...active].join(', ') || null });
+      }));
       await updateJob(job.id, {
         status: state.cancelled ? 'cancelled' : 'done',
         phase: 'cleanup',
