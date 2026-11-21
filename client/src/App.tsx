@@ -1,5 +1,6 @@
+import SyncProgress from './components/SyncProgress';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Layout, Button, Typography, Space, message, Spin, Modal, Progress } from 'antd';
+import { Layout, Button, Typography, Space, message, Spin, Modal } from 'antd';
 import {
   SyncOutlined,
   SettingOutlined,
@@ -602,47 +603,17 @@ function App() {
           : (syncJob?.currentFolder || syncJob?.phase || 'A iniciar...');
         const folderLine = syncJob?.currentFolder || '';
         return (
-          <div style={{
-            position: 'fixed',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 'min(720px, calc(100vw - 48px))',
-            background: '#fff',
-            borderRadius: 12,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-            border: '1px solid #e8e8e8',
-            padding: '14px 18px',
-            zIndex: 1500,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <SyncOutlined spin style={{ color: '#1677ff', fontSize: 18 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>A sincronizar emails</div>
-                <div style={{ fontSize: 12, color: '#595959', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {accountLine}
-                </div>
-                {folderLine && (
-                  <div style={{ fontSize: 11, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {folderLine}
-                  </div>
-                )}
-              </div>
-              {syncJobId && (
-                <Button size="small" danger onClick={handleCancelSync}>Cancelar</Button>
-              )}
-            </div>
-            <Progress
-              percent={pct}
-              size="small"
-              status="active"
-              format={() => `${syncJob?.foldersDone || 0}/${syncJob?.foldersTotal || 0}`}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#595959', marginTop: 4 }}>
-              <span>{syncJob?.emailsSynced || 0} novos/alterados{syncJob?.emailsRemoved ? ` · ${syncJob.emailsRemoved} removidos` : ''}</span>
-              <span>{elapsedStr}</span>
-            </div>
-          </div>
+          <SyncProgress
+            jobId={syncJobId}
+            title="A sincronizar emails"
+            accountLine={accountLine}
+            folderLine={folderLine}
+            pct={pct}
+            progressText={`${syncJob?.foldersDone || 0}/${syncJob?.foldersTotal || 0}`}
+            footerLeft={`${syncJob?.emailsSynced || 0} novos/alterados${syncJob?.emailsRemoved ? ` · ${syncJob.emailsRemoved} removidos` : ''}`}
+            elapsed={elapsedStr}
+            onCancel={handleCancelSync}
+          />
         );
       })()}
     </Layout>
