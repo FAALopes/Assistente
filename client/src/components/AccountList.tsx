@@ -241,9 +241,12 @@ function AccountList({
   useEffect(() => {
     if (!menu) return;
     const handler = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null); };
     window.addEventListener('click', handler);
     window.addEventListener('scroll', handler, true);
+    window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
       window.removeEventListener('click', handler);
       window.removeEventListener('scroll', handler, true);
     };

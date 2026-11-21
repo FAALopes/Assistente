@@ -160,6 +160,8 @@ function EmailList({
       return;
     }
     const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtxMenu(null); };
+    window.addEventListener('keydown', onKey);
     window.addEventListener('click', close);
     window.addEventListener('scroll', close, true);
 
@@ -171,6 +173,7 @@ function EmailList({
       .finally(() => setMatchLoading(false));
 
     return () => {
+      window.removeEventListener('keydown', onKey);
       window.removeEventListener('click', close);
       window.removeEventListener('scroll', close, true);
     };
