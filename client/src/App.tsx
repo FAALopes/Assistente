@@ -613,6 +613,7 @@ function App() {
             footerLeft={`${syncJob?.emailsSynced || 0} novos/alterados${syncJob?.emailsRemoved ? ` · ${syncJob.emailsRemoved} removidos` : ''}`}
             elapsed={elapsedStr}
             onCancel={handleCancelSync}
+            accounts={syncJob?.accountsProgress}
           />
         );
       })()}

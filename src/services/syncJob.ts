@@ -20,6 +20,20 @@ interface JobState {
   emailsSynced: number;
   emailsRemoved: number;
   cancelled?: boolean;
+  // Per-account progress shown as one line per mailbox in the UI
+  accounts: Record<string, AccountProgress>;
+}
+
+interface AccountProgress {
+  email: string;
+  done: number;
+  total: number;
+  folder: string | null;
+  status: 'waiting' | 'running' | 'done' | 'error';
+}
+
+function acct(state: JobState, email: string): AccountProgress {
+  return state.accounts[email] || (state.accounts[email] = { email, done: 0, total: 0, folder: null, status: 'running' });
 }
 
 // In-memory registry of running jobs so /cancel can set a flag the worker reads
@@ -121,6 +135,7 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
       },
     })));
   }
+  acct(state, accountEmail).total = folders.length;
   const serverIds = new Set(folders.map(f => f.id));
   const localFolders = await prisma.mailFolder.findMany({ where: { accountId }, select: { id: true } });
   const toDrop = localFolders.filter(f => !serverIds.has(f.id)).map(f => f.id);
@@ -181,6 +196,7 @@ async function syncMicrosoftAccount(state: JobState, accountId: string, accountE
       state.errors.push(`${accountEmail} / ${folder.path}: ${e.message}`);
     }
     state.foldersDone++;
+    { const a = acct(state, accountEmail); a.done++; a.folder = folder.path; }
     await updateJob(state.jobId, {
       foldersDone: state.foldersDone,
       emailsSynced: state.emailsSynced,
@@ -238,6 +254,7 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
       },
     });
   }
+  acct(state, accountEmail).total = folders.length;
   const serverPaths = new Set(folders.map(f => f.path));
   const localFolders = await prisma.mailFolder.findMany({ where: { accountId }, select: { id: true } });
   const toDrop = localFolders.filter(f => !serverPaths.has(f.id)).map(f => f.id);
@@ -277,6 +294,7 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
       }
 
       // Only touch currentFolder when the folder actually needs work (avoids 8000+ no-op updates)
+      acct(state, accountEmail).folder = folder.path;
       await updateJob(state.jobId, { currentFolder: `${accountEmail} / ${folder.path}` });
 
       if (uidValidityChanged) {
@@ -325,8 +343,11 @@ async function syncImapAccount(state: JobState, accountId: string, accountEmail:
       });
     } catch (e: any) {
       state.errors.push(`${accountEmail} / ${folder.path}: ${e.message}`);
+    } finally {
+      // Count EVERY folder, including the fast-path ones that return early above
+      state.foldersDone++;
+      acct(state, accountEmail).done++;
     }
-    state.foldersDone++;
     // Throttle UI updates: write every 10 folders or when something interesting happened
     if (state.foldersDone % 10 === 0) {
       await updateJob(state.jobId, {
@@ -391,9 +412,18 @@ export async function startSyncJob(accountIds?: string[]): Promise<string> {
     foldersDone: 0,
     emailsSynced: 0,
     emailsRemoved: 0,
+    accounts: {},
   };
 
   RUNNING_JOBS.set(job.id, state);
+  // Flush per-account progress once a second (cheap: one row update)
+  const flushProgress = () => updateJob(job.id, {
+    accountsProgress: Object.values(state.accounts) as any,
+    foldersDone: state.foldersDone,
+    emailsSynced: state.emailsSynced,
+    emailsRemoved: state.emailsRemoved,
+  }).catch(() => {});
+  const flushTimer = setInterval(flushProgress, 1000);
 
   // Fire-and-forget
   (async () => {
@@ -408,6 +438,7 @@ export async function startSyncJob(accountIds?: string[]): Promise<string> {
         const score = (p: string) => (p === 'MICROSOFT' ? 0 : 1);
         return score(a.provider) - score(b.provider);
       });
+      for (const a of accounts) state.accounts[a.email] = { email: a.email, done: 0, total: 0, folder: null, status: 'running' };
 
       // Pre-compute total folders across all accounts so the progress bar is stable from the start
       const folderCounts = await prisma.mailFolder.groupBy({
@@ -441,8 +472,10 @@ export async function startSyncJob(accountIds?: string[]): Promise<string> {
             where: { id: acc.id },
             data: { lastSyncAt: new Date() },
           });
+          acct(state, acc.email).status = 'done';
         } catch (e: any) {
           state.errors.push(`${acc.email}: ${e.message}`);
+          acct(state, acc.email).status = 'error';
         }
         active.delete(acc.email);
         accountsDone++;
@@ -464,6 +497,8 @@ export async function startSyncJob(accountIds?: string[]): Promise<string> {
         errors: [e.message, ...state.errors].slice(0, 50),
       });
     } finally {
+      clearInterval(flushTimer);
+      await flushProgress();
       RUNNING_JOBS.delete(job.id);
     }
   })();

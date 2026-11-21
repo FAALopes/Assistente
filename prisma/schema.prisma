@@ -103,6 +103,7 @@ model SyncJob {
   emailsSynced  Int      @default(0)
   emailsRemoved Int      @default(0)
   errors        Json?
+  accountsProgress Json? // per account: { email, done, total, folder, status }
   startedAt     DateTime @default(now())
   finishedAt    DateTime?
 

@@ -89,8 +89,17 @@ export interface SyncJob {
   emailsSynced: number;
   emailsRemoved: number;
   errors: string[] | null;
+  accountsProgress?: SyncAccountProgress[] | null;
   startedAt: string;
   finishedAt: string | null;
+}
+
+export interface SyncAccountProgress {
+  email: string;
+  done: number;
+  total: number;
+  folder: string | null;
+  status: 'waiting' | 'running' | 'done' | 'error';
 }
 
 export interface Rule {

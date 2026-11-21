@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Progress, Tooltip } from 'antd';
-import { SyncOutlined, MinusOutlined, CloseOutlined, ExpandAltOutlined } from '@ant-design/icons';
+import { SyncOutlined, MinusOutlined, CloseOutlined, ExpandAltOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import type { SyncAccountProgress } from '../types';
 
 interface Props {
   jobId: string | null;
@@ -12,6 +13,7 @@ interface Props {
   footerLeft: string;
   elapsed: string;
   onCancel: () => void;
+  accounts?: SyncAccountProgress[] | null;
 }
 
 type Pos = { x: number; y: number } | null;
@@ -108,7 +110,7 @@ function SyncProgress(p: Props) {
           <div style={{ fontSize: 12, color: '#595959', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {p.accountLine}
           </div>
-          {p.folderLine && (
+          {p.folderLine && !(p.accounts && p.accounts.length > 1) && (
             <div style={{ fontSize: 11, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {p.folderLine}
             </div>
@@ -119,6 +121,29 @@ function SyncProgress(p: Props) {
         {iconBtn('Esconder até ao fim desta sincronização', <CloseOutlined />, () => setHiddenFor(p.jobId || ''))}
       </div>
       <Progress percent={p.pct} size="small" status="active" format={() => p.progressText} />
+      {p.accounts && p.accounts.length > 1 && (
+        <div style={{ marginTop: 6, maxHeight: 220, overflowY: 'auto' }}>
+          {p.accounts.map((a) => {
+            const pctA = a.total > 0 ? Math.min(100, Math.round((a.done / a.total) * 100)) : 0;
+            return (
+              <div key={a.email} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, lineHeight: '20px' }}>
+                <span style={{ width: 14, display: 'inline-flex' }}>
+                  {a.status === 'done' ? <CheckCircleFilled style={{ color: '#52c41a' }} />
+                    : a.status === 'error' ? <CloseCircleFilled style={{ color: '#f5222d' }} />
+                    : <SyncOutlined spin style={{ color: '#1677ff' }} />}
+                </span>
+                <span style={{ width: 210, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.email}</span>
+                <Progress percent={a.status === 'done' ? 100 : pctA} size="small" showInfo={false} style={{ width: 120, margin: 0 }}
+                  status={a.status === 'error' ? 'exception' : a.status === 'done' ? 'success' : 'active'} />
+                <span style={{ width: 70, color: '#8c8c8c', textAlign: 'right' }}>{a.done}/{a.total || '…'}</span>
+                <span style={{ flex: 1, minWidth: 0, color: '#8c8c8c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {a.status === 'running' ? a.folder || '' : ''}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#595959', marginTop: 4 }}>
         <span>{p.footerLeft}</span>
         <span>{p.elapsed}</span>
