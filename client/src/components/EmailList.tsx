@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { Table, Tag, Input, Select, Space, Button, Modal, message } from 'antd';
+import { Table, Tag, Input, Select, Space, Button, Modal, TreeSelect, message } from 'antd';
 import {
   SearchOutlined,
   DeleteOutlined,
@@ -97,23 +97,52 @@ function EmailList({
   const [moveEmail, setMoveEmail] = useState<Email | null>(null);
   const [moving, setMoving] = useState(false);
 
-  const moveOptions = moveEmail
-    ? (foldersByAccount?.[moveEmail.accountId] || [])
-        .filter((f) => f.id !== moveEmail.folder)
-        .map((f) => ({ value: f.id, label: f.path || f.label }))
-        .sort((a, b) => a.label.localeCompare(b.label, 'pt'))
-    : [];
+  // Folder tree of every mailbox: the email can go to any folder of this or another account
+  const SEP = '';
+  const moveTree = (() => {
+    if (!moveEmail) return [];
+    const ordered = [...accounts].sort((x, y) => (x.id === moveEmail.accountId ? -1 : y.id === moveEmail.accountId ? 1 : 0));
+    return ordered
+      .filter((acc) => (foldersByAccount?.[acc.id] || []).length > 0)
+      .map((acc) => {
+        const folders = foldersByAccount?.[acc.id] || [];
+        const ids = new Set(folders.map((f) => f.id));
+        const node = (f: (typeof folders)[number]): any => ({
+          value: `${acc.id}${SEP}${f.id}`,
+          title: f.label,
+          search: `${acc.email} ${f.path || f.label}`,
+          disabled: acc.id === moveEmail.accountId && f.id === moveEmail.folder,
+          children: folders
+            .filter((c) => c.parentId === f.id)
+            .sort((x, y) => x.label.localeCompare(y.label, 'pt'))
+            .map(node),
+        });
+        return {
+          value: `acc${SEP}${acc.id}`,
+          title: <strong>{acc.email}</strong>,
+          search: acc.email,
+          selectable: false,
+          children: folders
+            .filter((f) => !f.parentId || !ids.has(f.parentId))
+            .sort((x, y) => x.label.localeCompare(y.label, 'pt'))
+            .map(node),
+        };
+      });
+  })();
 
-  const handleMove = async (folderId: string) => {
+  const handleMove = async (value: string) => {
     if (!moveEmail) return;
+    const [accountId, folderId] = value.split(SEP);
+    if (!folderId || accountId === 'acc') return;
     setMoving(true);
     try {
-      const r = await moveEmailToFolder(moveEmail.id, folderId);
-      message.success(`Movido para "${r.folder}"`);
+      const r = await moveEmailToFolder(moveEmail.id, folderId, accountId);
+      if (r.warning) message.warning(r.warning, 8);
+      else message.success(`Movido para "${r.folder}"`);
       setMoveEmail(null);
       onMoved?.();
     } catch (e: any) {
-      message.error(e?.response?.data?.error || 'Erro ao mover email', 5);
+      message.error(e?.response?.data?.error || 'Erro ao mover email', 8);
     } finally {
       setMoving(false);
     }
@@ -549,7 +578,7 @@ function EmailList({
               setCtxMenu(null);
             }}
           >
-            <FolderOpenOutlined style={{ color: '#faad14' }} /> Mover para pasta...
+            <FolderOpenOutlined style={{ color: '#faad14' }} /> Enviar para pasta...
           </div>
           <div
             style={{
@@ -589,7 +618,7 @@ function EmailList({
       )}
 
       <Modal
-        title="Mover para pasta"
+        title="Enviar para pasta"
         open={moveEmail !== null}
         onCancel={() => setMoveEmail(null)}
         footer={null}
@@ -601,20 +630,24 @@ function EmailList({
             <div style={{ fontSize: 12, color: '#595959', marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {moveEmail.subject || '(sem assunto)'}
             </div>
-            <Select
+            <TreeSelect
               showSearch
               autoFocus
               defaultOpen
               style={{ width: '100%' }}
-              placeholder="Escrever para procurar a pasta..."
-              options={moveOptions}
-              optionFilterProp="label"
+              placeholder="Escolher a pasta (desta ou doutra caixa) ou escrever para procurar..."
+              treeData={moveTree}
+              treeNodeFilterProp="search"
+              treeDefaultExpandedKeys={[`acc${SEP}${moveEmail.accountId}`]}
               loading={moving}
               disabled={moving}
               onChange={(val) => handleMove(val as string)}
               notFoundContent="Nenhuma pasta encontrada"
-              listHeight={320}
+              listHeight={400}
             />
+            <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 8 }}>
+              Para outra caixa de email, o email é copiado (com anexos) e o original vai para o Lixo.
+            </div>
           </>
         )}
       </Modal>

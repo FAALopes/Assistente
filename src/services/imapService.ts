@@ -477,3 +477,34 @@ export async function moveToInboxByExternalId(accountId: string, externalId: str
   const folders = await detectFolders(accountId);
   await moveMessage(accountId, parsed.folder, parsed.uid, folders.inbox);
 }
+
+/** Raw RFC 822 source of a message. */
+export async function getRawMessage(accountId: string, externalId: string): Promise<Buffer> {
+  const parsed = parseExternalId(externalId);
+  if (!parsed) throw new Error('Invalid IMAP externalId');
+  const client = await openClient(accountId);
+  try {
+    const lock = await client.getMailboxLock(parsed.folder);
+    try {
+      const msg: any = await client.fetchOne(String(parsed.uid), { source: true }, { uid: true });
+      if (!msg?.source) throw new Error('Mensagem não encontrada no servidor IMAP');
+      return msg.source as Buffer;
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
+/** APPEND a raw message to a folder. Returns the new UID when the server reports it (UIDPLUS). */
+export async function appendMessage(accountId: string, folder: string, raw: Buffer, seen: boolean, date: Date): Promise<number | null> {
+  const client = await openClient(accountId);
+  try {
+    const r: any = await client.append(folder, raw, seen ? ['\\Seen'] : [], date);
+    if (!r) throw new Error('O servidor IMAP recusou guardar a mensagem');
+    return typeof r.uid === 'number' ? r.uid : null;
+  } finally {
+    await client.logout();
+  }
+}

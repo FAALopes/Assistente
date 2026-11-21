@@ -84,3 +84,28 @@ export async function moveEmailToFolder(accountId: string, externalId: string, f
   }
   throw new Error('Provider not supported');
 }
+
+/** Raw MIME source of a message, whatever the provider. */
+export async function getRawMime(accountId: string, externalId: string): Promise<Buffer> {
+  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+  if (!acc) throw new Error('Account not found');
+  if (acc.provider === 'MICROSOFT') return graph.getMessageMime(await graph.getValidToken(accountId), externalId);
+  if (acc.provider === 'IMAP') return imap.getRawMessage(accountId, externalId);
+  throw new Error('Provider not supported');
+}
+
+/** Store a copy of a MIME message in a folder of (another) account. Returns the new externalId if known. */
+export async function importMime(
+  accountId: string, folderId: string, raw: Buffer, opts: { isRead: boolean; receivedAt: Date },
+): Promise<string | null> {
+  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+  if (!acc) throw new Error('Account not found');
+  if (acc.provider === 'MICROSOFT') {
+    return graph.importMimeToFolder(await graph.getValidToken(accountId), folderId, raw, opts);
+  }
+  if (acc.provider === 'IMAP') {
+    const uid = await imap.appendMessage(accountId, folderId, raw, opts.isRead, opts.receivedAt);
+    return uid !== null ? imap.buildExternalId(accountId, folderId, uid) : null;
+  }
+  throw new Error('Provider not supported');
+}

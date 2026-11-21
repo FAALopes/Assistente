@@ -469,3 +469,95 @@ export async function moveEmailToFolder(accessToken: string, emailId: string, de
   const moved: any = await client.api(`/me/messages/${emailId}/move`).post({ destinationId: destinationFolderId });
   return moved?.id || null;
 }
+
+/** Raw RFC 822 (MIME) source of a message. */
+export async function getMessageMime(accessToken: string, messageId: string): Promise<Buffer> {
+  const r = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(messageId)}/$value`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) throw new Error(`Graph $value ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return Buffer.from(await r.arrayBuffer());
+}
+
+const GRAPH_INLINE_LIMIT = 3 * 1024 * 1024; // Graph rejects request bodies over ~4 MB
+
+/**
+ * Put a copy of a MIME message into a folder of this mailbox as a normal RECEIVED message.
+ * Graph's MIME upload always creates a draft, so the message is rebuilt from the parsed MIME
+ * as JSON with PR_MESSAGE_FLAGS set at creation (the only moment it can be set).
+ * Returns the new message id. If anything fails after creation, the partial copy is removed.
+ */
+export async function importMimeToFolder(
+  accessToken: string,
+  folderId: string,
+  mime: Buffer,
+  opts: { isRead: boolean; receivedAt: Date },
+): Promise<string> {
+  const { simpleParser } = await import('mailparser');
+  const p: any = await simpleParser(mime);
+  const addr = (a: any) => (a?.value || []).filter((v: any) => v.address).map((v: any) => ({ emailAddress: { address: v.address, name: v.name || v.address } }));
+  const from = addr(p.from)[0];
+  const date = (p.date instanceof Date && !isNaN(p.date.getTime())) ? p.date : opts.receivedAt;
+
+  const atts = (p.attachments || []).map((a: any) => ({
+    '@odata.type': '#microsoft.graph.fileAttachment',
+    name: a.filename || 'anexo',
+    contentType: a.contentType || 'application/octet-stream',
+    contentBytes: Buffer.from(a.content).toString('base64'),
+    isInline: a.contentDisposition === 'inline' && !!a.cid,
+    ...(a.cid ? { contentId: a.cid } : {}),
+    _size: a.size || a.content?.length || 0,
+  }));
+  const totalAtt = atts.reduce((s: number, a: any) => s + a._size, 0);
+  const strip = (a: any) => { const { _size, ...rest } = a; return rest; };
+
+  const message: any = {
+    subject: p.subject || '',
+    body: p.html ? { contentType: 'html', content: p.html } : { contentType: 'text', content: p.text || '' },
+    toRecipients: addr(p.to),
+    ccRecipients: addr(p.cc),
+    replyTo: addr(p.replyTo),
+    isRead: opts.isRead,
+    singleValueExtendedProperties: [
+      // PR_MESSAGE_FLAGS: no MSGFLAG_UNSENT => a received message, not a draft (1 = read)
+      { id: 'Integer 0x0E07', value: opts.isRead ? '1' : '0' },
+      { id: 'SystemTime 0x0E06', value: opts.receivedAt.toISOString() }, // delivery time
+      { id: 'SystemTime 0x0039', value: date.toISOString() },             // sent time
+    ],
+  };
+  if (from) { message.from = from; message.sender = from; }
+  if (totalAtt <= GRAPH_INLINE_LIMIT && atts.length > 0) message.attachments = atts.map(strip);
+
+  const client = createGraphClient(accessToken);
+  const created: any = await client.api(`/me/mailFolders/${folderId}/messages`).post(message);
+  const id: string = created.id;
+
+  if (totalAtt > GRAPH_INLINE_LIMIT) {
+    try {
+      for (const a of atts) {
+        if (a._size <= GRAPH_INLINE_LIMIT) {
+          await client.api(`/me/messages/${id}/attachments`).post(strip(a));
+        } else {
+          const session: any = await client.api(`/me/messages/${id}/attachments/createUploadSession`).post({
+            AttachmentItem: { attachmentType: 'file', name: a.name, size: a._size, contentType: a.contentType, isInline: false },
+          });
+          const bytes = Buffer.from(a.contentBytes, 'base64');
+          const CHUNK = 4 * 320 * 1024;
+          for (let start = 0; start < bytes.length; start += CHUNK) {
+            const end = Math.min(bytes.length, start + CHUNK);
+            const r = await fetch(session.uploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Length': String(end - start), 'Content-Range': `bytes ${start}-${end - 1}/${bytes.length}` },
+              body: bytes.subarray(start, end),
+            });
+            if (!r.ok) throw new Error(`upload ${a.name}: ${r.status}`);
+          }
+        }
+      }
+    } catch (e) {
+      await client.api(`/me/messages/${id}`).delete().catch(() => {});
+      throw e;
+    }
+  }
+  return id;
+}

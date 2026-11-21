@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { RuleAction } from '@prisma/client';
 import { isValidCategory } from '../services/categories';
 import { prisma } from '../index';
-import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, moveEmailToFolder as mailMoveToFolder } from '../services/mailService';
+import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, moveEmailToFolder as mailMoveToFolder, getRawMime, importMime } from '../services/mailService';
 import { getValidToken, fetchMessageBody } from '../services/graphService';
 import { fetchImapMessageBody, parseExternalId } from '../services/imapService';
 import { resolveFolderId, resolveFolderIdForAccounts } from '../services/folderResolver';
@@ -383,15 +383,52 @@ router.post('/:id/move', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Email not found' });
       return;
     }
+    const targetAccountId: string = typeof req.body?.accountId === 'string' && req.body.accountId ? req.body.accountId : email.accountId;
     const target = await prisma.mailFolder.findUnique({
-      where: { accountId_id: { accountId: email.accountId, id: folderId } },
+      where: { accountId_id: { accountId: targetAccountId, id: folderId } },
+      include: { account: { select: { email: true } } },
     });
     if (!target) {
-      res.status(400).json({ error: 'A pasta de destino não pertence à conta deste email' });
+      res.status(400).json({ error: 'Pasta de destino não encontrada' });
       return;
     }
-    if (email.folder === folderId) {
+    if (targetAccountId === email.accountId && email.folder === folderId) {
       res.json({ moved: false, folder: target.displayName });
+      return;
+    }
+    const cleared = { triageAction: null, triageReason: null, triageConfidence: null, triageClassifiedAt: null };
+
+    if (targetAccountId !== email.accountId) {
+      // Another mailbox: servers cannot move between accounts, so copy the full message
+      // (MIME, with attachments) into the destination, then send the original to the Trash.
+      let copiedId: string | null;
+      try {
+        const raw = await getRawMime(email.accountId, email.externalId);
+        copiedId = await importMime(targetAccountId, folderId, raw, { isRead: email.isRead, receivedAt: email.receivedAt });
+      } catch (e: any) {
+        console.error('Cross-account copy error:', e?.message);
+        res.status(502).json({ error: `Não foi possível copiar para a outra caixa (o original não foi tocado): ${e?.message || 'erro'}` });
+        return;
+      }
+      let warning: string | null = null;
+      try {
+        await mailDeleteEmail(email.accountId, email.externalId);
+      } catch (e: any) {
+        warning = `Copiado, mas o original não foi para o Lixo: ${e?.message || 'erro'}`;
+      }
+      if (warning) {
+        res.json({ moved: true, folder: `${target.account.email} / ${target.displayName}`, warning });
+        return;
+      }
+      if (copiedId) {
+        await prisma.email.update({
+          where: { id },
+          data: { accountId: targetAccountId, folder: folderId, externalId: copiedId, ...cleared },
+        });
+      } else {
+        await prisma.email.delete({ where: { id } }); // next sync of the destination brings it back
+      }
+      res.json({ moved: true, folder: `${target.account.email} / ${target.displayName}` });
       return;
     }
 
@@ -404,7 +441,6 @@ router.post('/:id/move', async (req: Request, res: Response) => {
       return;
     }
 
-    const cleared = { triageAction: null, triageReason: null, triageConfidence: null, triageClassifiedAt: null };
     if (newExternalId) {
       await prisma.email.update({ where: { id }, data: { folder: folderId, externalId: newExternalId, ...cleared } });
     } else if (email.externalId.startsWith('imap:')) {
