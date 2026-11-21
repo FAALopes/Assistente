@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Table, Tag, Input, Select, Space, Button, Modal, message } from 'antd';
 import {
   SearchOutlined,
@@ -78,6 +78,18 @@ function EmailList({
   };
 
   const [ctxMenu, setCtxMenu] = useState<{ email: Email; x: number; y: number } | null>(null);
+  const ctxRef = useRef<HTMLDivElement>(null);
+  // Keep the context menu inside the window (it grows after the action lookup loads):
+  // near the bottom/right edge it opens upwards/leftwards, like a native menu.
+  useLayoutEffect(() => {
+    const el = ctxRef.current;
+    if (!ctxMenu || !el) return;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    const top = ctxMenu.y + h + 8 > window.innerHeight ? Math.max(8, ctxMenu.y - h) : ctxMenu.y;
+    const left = ctxMenu.x + w + 8 > window.innerWidth ? Math.max(8, ctxMenu.x - w) : ctxMenu.x;
+    el.style.top = `${top}px`;
+    el.style.left = `${left}px`;
+  });
   const [matchedAction, setMatchedAction] = useState<EmailAction | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
   const [defineModalEmail, setDefineModalEmail] = useState<Email | null>(null);
@@ -434,12 +446,15 @@ function EmailList({
 
       {ctxMenu && (
         <div
+          ref={ctxRef}
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
           style={{
             position: 'fixed',
             top: ctxMenu.y,
             left: ctxMenu.x,
+            maxHeight: 'calc(100vh - 16px)',
+            overflowY: 'auto',
             background: '#fff',
             borderRadius: 8,
             boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
