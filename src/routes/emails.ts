@@ -27,7 +27,8 @@ router.get('/', async (req: Request, res: Response) => {
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10)));
+    // The list shows the whole folder (no pages); 20k is just a safety cap for the "all folders" view
+    const limitNum = Math.min(20000, Math.max(1, parseInt(limit as string, 10)));
     const skip = (pageNum - 1) * limitNum;
 
     const where: any = {};

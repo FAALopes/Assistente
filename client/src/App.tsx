@@ -66,7 +66,7 @@ function App() {
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [filters, setFilters] = useState<EmailFilters>({
     page: 1,
-    limit: 50,
+    limit: 20000, // whole folder, no pagination
   });
   const isJunkFolder = filters.folder === 'junkemail';
   const [previewEmail, setPreviewEmail] = useState<Email | null>(null);
@@ -500,9 +500,6 @@ function App() {
                   selectedIds={selectedIds}
                   onSelectionChange={setSelectedIds}
                   onFilterChange={handleFilterChange}
-                  onPageChange={(page, limit) =>
-                    setFilters((prev) => ({ ...prev, page, limit }))
-                  }
                   onDelete={handleDeleteEmail}
                   onSelectEmail={setPreviewEmail}
                   selectedEmailId={previewEmail?.id || null}

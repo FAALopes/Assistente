@@ -34,7 +34,6 @@ interface EmailListProps {
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   onFilterChange: (filters: Partial<EmailFilters>) => void;
-  onPageChange: (page: number, limit: number) => void;
   onDelete?: (id: string) => void;
   onSelectEmail?: (email: Email | null) => void;
   selectedEmailId?: string | null;
@@ -54,7 +53,6 @@ function EmailList({
   selectedIds,
   onSelectionChange,
   onFilterChange,
-  onPageChange,
   onDelete,
   onSelectEmail,
   selectedEmailId,
@@ -96,6 +94,13 @@ function EmailList({
   const [editingAction, setEditingAction] = useState<EmailAction | null>(null);
   const [moveEmail, setMoveEmail] = useState<Email | null>(null);
   const [moving, setMoving] = useState(false);
+  // Whole folder in one scrollable (virtualised) list, sized to the window
+  const [tableHeight, setTableHeight] = useState(() => Math.max(300, window.innerHeight - 260));
+  useEffect(() => {
+    const onResize = () => setTableHeight(Math.max(300, window.innerHeight - 260));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [moveTarget, setMoveTarget] = useState<string | undefined>(undefined);
 
   // Folder tree of every mailbox: the email can go to any folder of this or another account
@@ -416,7 +421,7 @@ function EmailList({
           onChange={(val) => onFilterChange({ category: val })}
         />
         <span style={{ color: '#8c8c8c', fontSize: 13, marginLeft: 'auto' }}>
-          {total} email{total !== 1 ? 's' : ''}
+          {emails.length < total ? `a mostrar ${emails.length} de ` : ''}{total} email{total !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -454,16 +459,9 @@ function EmailList({
             });
           }
         }}
-        pagination={{
-          current: filters.page || 1,
-          pageSize: filters.limit || 50,
-          total,
-          showSizeChanger: true,
-          pageSizeOptions: ['25', '50', '100'],
-          showTotal: (t, range) =>
-            `${range[0]}-${range[1]} de ${t} emails`,
-          onChange: (page, pageSize) => onPageChange(page, pageSize),
-        }}
+        pagination={false}
+        virtual
+        scroll={{ y: tableHeight }}
         style={{
           background: '#fff',
           borderRadius: '0 0 8px 8px',
