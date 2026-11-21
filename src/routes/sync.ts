@@ -4,11 +4,13 @@ import { prisma } from '../index';
 
 const router = Router();
 
-// POST /api/sync/start { accountId? } -> { jobId }
+// POST /api/sync/start { accountId? | accountIds? } -> { jobId } (no ids = all accounts)
 router.post('/start', async (req: Request, res: Response) => {
   try {
-    const accountId = typeof req.body?.accountId === 'string' ? req.body.accountId : undefined;
-    const jobId = await startSyncJob(accountId);
+    const ids: string[] = Array.isArray(req.body?.accountIds)
+      ? req.body.accountIds.filter((x: unknown) => typeof x === 'string')
+      : typeof req.body?.accountId === 'string' ? [req.body.accountId] : [];
+    const jobId = await startSyncJob(ids.length ? ids : undefined);
     res.json({ jobId });
   } catch (e: any) {
     console.error('startSyncJob failed:', e);

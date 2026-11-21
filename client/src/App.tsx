@@ -145,15 +145,14 @@ function App() {
       if (document.hidden) return;
       if (syncing) return;
       const now = Date.now();
-      for (const acc of accounts) {
-        if (!acc.autoSyncMinutes) continue;
-        if (brokenAccountsRef.current.has(acc.id)) continue;
+      // Every account that is due syncs in ONE job, all at the same time (like Outlook)
+      const due = accounts.filter((acc) => {
+        if (!acc.autoSyncMinutes) return false;
+        if (brokenAccountsRef.current.has(acc.id)) return false;
         const last = acc.lastSyncAt ? new Date(acc.lastSyncAt).getTime() : 0;
-        if (now - last >= acc.autoSyncMinutes * 60_000) {
-          handleSync(acc.id);
-          return; // one at a time
-        }
-      }
+        return now - last >= acc.autoSyncMinutes * 60_000;
+      });
+      if (due.length > 0) handleSync(due.map((a) => a.id));
     };
     const id = setInterval(tick, 60_000);
     tick();
@@ -161,13 +160,13 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts, syncing]);
 
-  const handleSync = async (accountId?: string) => {
+  const handleSync = async (accountIds?: string | string[]) => {
     if (syncing) return;
     setSyncing(true);
     setSyncStartedAt(Date.now());
     setSyncJob(null);
     try {
-      const { jobId } = await syncEmails(accountId);
+      const { jobId } = await syncEmails(accountIds);
       setSyncJobId(jobId);
       // Poll every 1500ms
       while (true) {
@@ -188,7 +187,11 @@ function App() {
             const reauthOnly = job.errors.every((e) => /Token refresh failed|re-authenticate/i.test(e));
             if (reauthOnly) {
               // Mark the account as broken so auto-sync stops nagging this session
-              if (accountId) brokenAccountsRef.current.add(accountId);
+              // Mark the accounts named in the errors so auto-sync stops retrying them this session
+              for (const acc of accounts) {
+                if (job.errors.some((e) => e.startsWith(`${acc.email}:`))) brokenAccountsRef.current.add(acc.id);
+              }
+              if (typeof accountIds === 'string') brokenAccountsRef.current.add(accountIds);
               message.warning('Sessao expirou. Re-adiciona a conta Microsoft para continuar.', 6);
             } else {
               Modal.warning({

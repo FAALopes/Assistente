@@ -368,7 +368,8 @@ export async function cleanupOrphanJobs(): Promise<number> {
   return result.count;
 }
 
-export async function startSyncJob(accountId?: string): Promise<string> {
+export async function startSyncJob(accountIds?: string[]): Promise<string> {
+  const accountId = accountIds && accountIds.length === 1 ? accountIds[0] : undefined;
   // Only block if we actually have a worker in memory for that running job
   const running = await prisma.syncJob.findFirst({ where: { status: 'running' } });
   if (running && RUNNING_JOBS.has(running.id)) return running.id;
@@ -398,8 +399,8 @@ export async function startSyncJob(accountId?: string): Promise<string> {
   (async () => {
     try {
       const accounts = await prisma.emailAccount.findMany({
-        where: accountId
-          ? { id: accountId }
+        where: accountIds && accountIds.length > 0
+          ? { id: { in: accountIds } }
           : { provider: { in: ['MICROSOFT', 'IMAP'] } },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       });
