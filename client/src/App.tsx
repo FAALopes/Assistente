@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout, Button, Typography, Space, message, Spin, Modal, Tooltip } from 'antd';
 import {
   DeleteOutlined,
+  ClockCircleOutlined,
   SyncOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -365,10 +366,10 @@ function App() {
             selectedAccountId={filters.account}
             selectedFolder={filters.folder}
             onSelectAccount={(accountId) =>
-              handleFilterChange({ account: accountId })
+              handleFilterChange({ account: accountId, agora: undefined })
             }
             onSelectFolder={(folder) =>
-              handleFilterChange({ folder })
+              handleFilterChange({ folder, agora: undefined })
             }
             onAccountUpdated={fetchAccounts}
             onSyncAccount={handleSync}
@@ -442,6 +443,19 @@ function App() {
             >
               Regras
             </Button>
+            <Tooltip title="Emails por ler das últimas 24 horas, de todas as caixas">
+              <Button
+                type={filters.agora ? 'primary' : 'default'}
+                icon={<ClockCircleOutlined />}
+                onClick={() => handleFilterChange(
+                  filters.agora
+                    ? { agora: undefined }
+                    : { agora: true, account: undefined, folder: undefined, category: undefined, search: undefined },
+                )}
+              >
+                AGORA
+              </Button>
+            </Tooltip>
             <Button
               icon={<KeyOutlined />}
               onClick={() => setConfigOpen(true)}

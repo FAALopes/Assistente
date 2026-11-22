@@ -45,6 +45,18 @@ router.get('/', async (req: Request, res: Response) => {
       where.category = category;
     }
 
+    // "AGORA": unread mail of the last 24 h in every mailbox (junk, trash, drafts and sent left out)
+    if (req.query.agora === '1' || req.query.agora === 'true') {
+      where.isRead = false;
+      where.receivedAt = { gte: new Date(Date.now() - 24 * 3600 * 1000) };
+      const ids = (await prisma.emailAccount.findMany({ select: { id: true } })).map((a) => a.id);
+      const maps = await Promise.all(
+        (['junkemail', 'deleteditems', 'drafts', 'sentitems'] as const).map((k) => resolveFolderIdForAccounts(ids, k)),
+      );
+      const skip = maps.flatMap((m) => [...m.entries()].map(([accountId, folder]) => ({ accountId, folder })));
+      if (skip.length > 0) where.NOT = skip;
+    }
+
     if (search && typeof search === 'string') {
       where.OR = [
         { from: { contains: search, mode: 'insensitive' } },

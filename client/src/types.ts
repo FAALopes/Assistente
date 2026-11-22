@@ -125,6 +125,7 @@ export interface EmailFilters {
   folder?: string;
   category?: EmailCategory;
   search?: string;
+  agora?: boolean; // unread, last 24 h, all mailboxes
   page?: number;
   limit?: number;
   sortField?: string;

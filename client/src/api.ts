@@ -102,8 +102,9 @@ export async function createImapAccount(p: ImapCreateParams): Promise<EmailAccou
 export async function getEmails(
   params?: EmailFilters,
 ): Promise<PaginatedResponse<Email>> {
+  const { agora, ...rest } = params || {};
   const { data } = await api.get<PaginatedResponse<Email>>('/api/emails', {
-    params,
+    params: agora ? { ...rest, agora: 1 } : rest,
   });
   return data;
 }
