@@ -250,7 +250,25 @@ function EmailList({
     ),
   };
 
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
   const columns: ColumnsType<Email> = [
+    // AGORA mixes every mailbox, so each row says which one it belongs to
+    ...(filters.agora ? [{
+      title: 'Caixa',
+      key: 'account',
+      width: 170,
+      ellipsis: true,
+      render: (_: unknown, record: Email) => {
+        const acc = accountById.get(record.accountId);
+        const name = acc?.displayName || acc?.email || record.account?.email || '';
+        return (
+          <span title={acc?.email || name} style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
+            {acc?.color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: acc.color, flexShrink: 0 }} />}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          </span>
+        );
+      },
+    }] as ColumnsType<Email> : []),
     {
       title: 'De',
       dataIndex: 'from',
