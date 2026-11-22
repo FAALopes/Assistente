@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Modal, Input, Select, Spin, message } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Modal, Input, Select, Spin, Tooltip, message } from 'antd';
+import {
+  BoldOutlined, ItalicOutlined, UnderlineOutlined, StrikethroughOutlined,
+  UnorderedListOutlined, OrderedListOutlined, FontColorsOutlined, HighlightOutlined, ClearOutlined,
+} from '@ant-design/icons';
 import { getComposeDefaults, sendComposed } from '../api';
 import type { Email } from '../types';
 
@@ -11,7 +15,24 @@ const TITLES: Record<ComposeMode, string> = {
   forward: 'Reencaminhar',
 };
 
-const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const TEXT_COLORS = ['#000000', '#f5222d', '#fa8c16', '#52c41a', '#1677ff', '#722ed1'];
+const MARK_COLORS = ['#fff566', '#b7eb8f', '#91caff', '#ffadd2', 'transparent'];
+
+// Toolbar button: onMouseDown + preventDefault keeps the selection inside the editor
+function Tb({ title, onRun, children }: { title: string; onRun: () => void; children: React.ReactNode }) {
+  return (
+    <Tooltip title={title} mouseEnterDelay={0.5}>
+      <span
+        onMouseDown={(e) => { e.preventDefault(); onRun(); }}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 26, borderRadius: 4, cursor: 'pointer', fontSize: 14 }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+      >
+        {children}
+      </span>
+    </Tooltip>
+  );
+}
 
 interface Props {
   email: Email | null;
@@ -29,11 +50,14 @@ function ComposeModal({ email, mode, onClose, onSent }: Props) {
   const [to, setTo] = useState<string[]>([]);
   const [cc, setCc] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
-  const [text, setText] = useState('');
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [palette, setPalette] = useState<'fore' | 'mark' | null>(null);
+  const cmd = (name: string, value?: string) => { editorRef.current?.focus(); document.execCommand(name, false, value); };
 
   useEffect(() => {
     if (!email || !mode) return;
-    setTo([]); setCc([]); setSubject(''); setText(''); setFrom('');
+    setTo([]); setCc([]); setSubject(''); setFrom(''); setPalette(null);
+    if (editorRef.current) editorRef.current.innerHTML = '';
     setLoading(true);
     getComposeDefaults(email.id, mode)
       .then((d) => { setTo(d.to); setCc(d.cc); setSubject(d.subject); setFrom(d.from); })
@@ -45,7 +69,7 @@ function ComposeModal({ email, mode, onClose, onSent }: Props) {
     if (!email || !mode) return;
     setSending(true);
     try {
-      const html = escapeHtml(text).replace(/\r?\n/g, '<br>');
+      const html = editorRef.current?.innerHTML || '';
       await sendComposed(email.id, { mode, to, cc, subject, html });
       message.success('Email enviado');
       onSent();
@@ -89,13 +113,39 @@ function ComposeModal({ email, mode, onClose, onSent }: Props) {
           <span style={label}>Assunto</span>
           <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
         </div>
-        <Input.TextArea
-          autoFocus
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          autoSize={{ minRows: 10, maxRows: 22 }}
-          placeholder="Escrever a mensagem..."
-        />
+        <div style={{ border: '1px solid #d9d9d9', borderRadius: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '3px 6px', borderBottom: '1px solid #f0f0f0', position: 'relative' }}>
+            <Tb title="Negrito (Ctrl+B)" onRun={() => cmd('bold')}><BoldOutlined /></Tb>
+            <Tb title="Itálico (Ctrl+I)" onRun={() => cmd('italic')}><ItalicOutlined /></Tb>
+            <Tb title="Sublinhado (Ctrl+U)" onRun={() => cmd('underline')}><UnderlineOutlined /></Tb>
+            <Tb title="Rasurado" onRun={() => cmd('strikeThrough')}><StrikethroughOutlined /></Tb>
+            <span style={{ width: 1, height: 18, background: '#e8e8e8', margin: '0 4px' }} />
+            <Tb title="Lista com marcas" onRun={() => cmd('insertUnorderedList')}><UnorderedListOutlined /></Tb>
+            <Tb title="Lista numerada" onRun={() => cmd('insertOrderedList')}><OrderedListOutlined /></Tb>
+            <span style={{ width: 1, height: 18, background: '#e8e8e8', margin: '0 4px' }} />
+            <Tb title="Cor do texto" onRun={() => setPalette(palette === 'fore' ? null : 'fore')}><FontColorsOutlined /></Tb>
+            <Tb title="Realce" onRun={() => setPalette(palette === 'mark' ? null : 'mark')}><HighlightOutlined /></Tb>
+            <Tb title="Limpar formatação" onRun={() => cmd('removeFormat')}><ClearOutlined /></Tb>
+            {palette && (
+              <span style={{ display: 'inline-flex', gap: 6, marginLeft: 8, alignItems: 'center' }}>
+                {(palette === 'fore' ? TEXT_COLORS : MARK_COLORS).map((c) => (
+                  <span
+                    key={c}
+                    title={c === 'transparent' ? 'Sem realce' : undefined}
+                    onMouseDown={(e) => { e.preventDefault(); cmd(palette === 'fore' ? 'foreColor' : 'hiliteColor', c); setPalette(null); }}
+                    style={{ width: 18, height: 18, borderRadius: 4, background: c, border: c === 'transparent' ? '1px dashed #bfbfbf' : '1px solid rgba(0,0,0,0.15)', cursor: 'pointer' }}
+                  />
+                ))}
+              </span>
+            )}
+          </div>
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            style={{ minHeight: 220, maxHeight: 440, overflowY: 'auto', padding: '8px 11px', outline: 'none', fontSize: 14, lineHeight: 1.5 }}
+          />
+        </div>
         <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 6 }}>
           O email original segue citado por baixo do texto
           {mode === 'forward' ? ', com os anexos.' : '.'}
