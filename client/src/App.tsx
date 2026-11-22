@@ -395,12 +395,30 @@ function App() {
         >
           <Space size={0}>
             <Button
-              type={tab === 'mail' ? 'primary' : 'text'}
-              onClick={() => setTab('mail')}
+              type={tab === 'mail' && !filters.agora ? 'primary' : 'text'}
+              onClick={() => { setTab('mail'); if (filters.agora) handleFilterChange({ agora: undefined }); }}
               style={{ fontWeight: 600 }}
             >
               Emails
             </Button>
+            <Tooltip title="Emails por ler das últimas 24 horas, de todas as caixas">
+              <Button
+                type={tab === 'mail' && filters.agora ? 'primary' : 'text'}
+                icon={<ClockCircleOutlined />}
+                style={{ fontWeight: 600 }}
+                onClick={() => {
+                  const on = tab === 'mail' && filters.agora;
+                  setTab('mail');
+                  handleFilterChange(
+                    on
+                      ? { agora: undefined }
+                      : { agora: true, account: undefined, folder: undefined, category: undefined, search: undefined },
+                  );
+                }}
+              >
+                AGORA
+              </Button>
+            </Tooltip>
             <Button
               type={tab === 'archive' ? 'primary' : 'text'}
               onClick={() => setTab('archive')}
@@ -445,19 +463,6 @@ function App() {
             >
               Regras
             </Button>
-            <Tooltip title="Emails por ler das últimas 24 horas, de todas as caixas">
-              <Button
-                type={filters.agora ? 'primary' : 'default'}
-                icon={<ClockCircleOutlined />}
-                onClick={() => handleFilterChange(
-                  filters.agora
-                    ? { agora: undefined }
-                    : { agora: true, account: undefined, folder: undefined, category: undefined, search: undefined },
-                )}
-              >
-                AGORA
-              </Button>
-            </Tooltip>
             <Button
               icon={<KeyOutlined />}
               onClick={() => setConfigOpen(true)}
