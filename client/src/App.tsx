@@ -74,6 +74,7 @@ function App() {
   });
   const isJunkFolder = filters.folder === 'junkemail';
   const [previewEmail, setPreviewEmail] = useState<Email | null>(null);
+  const [syncAuto, setSyncAuto] = useState(false);
   const [composeMode, setComposeMode] = useState<ComposeMode | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -157,7 +158,7 @@ function App() {
         const last = acc.lastSyncAt ? new Date(acc.lastSyncAt).getTime() : 0;
         return now - last >= acc.autoSyncMinutes * 60_000;
       });
-      if (due.length > 0) handleSync(due.map((a) => a.id));
+      if (due.length > 0) handleSync(due.map((a) => a.id), true);
     };
     const id = setInterval(tick, 60_000);
     tick();
@@ -165,8 +166,9 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accounts, syncing]);
 
-  const handleSync = async (accountIds?: string | string[]) => {
+  const handleSync = async (accountIds?: string | string[], auto = false) => {
     if (syncing) return;
+    setSyncAuto(auto);
     setSyncing(true);
     setSyncStartedAt(Date.now());
     setSyncJob(null);
@@ -647,7 +649,7 @@ function App() {
         return (
           <SyncProgress
             jobId={syncJobId}
-            title="A sincronizar emails"
+            title={syncAuto ? 'Sincronização automática' : 'A sincronizar emails'}
             accountLine={accountLine}
             folderLine={folderLine}
             pct={pct}
