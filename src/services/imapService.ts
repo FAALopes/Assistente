@@ -508,3 +508,92 @@ export async function appendMessage(accountId: string, folder: string, raw: Buff
     await client.logout();
   }
 }
+
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Addresses and subject of a message, to prefill a reply/forward. */
+export async function getImapComposeSource(accountId: string, externalId: string): Promise<{ subject: string; from: string | null; replyTo: string[]; to: string[]; cc: string[] }> {
+  const { simpleParser } = await import('mailparser');
+  const p: any = await simpleParser(await getRawMessage(accountId, externalId));
+  const list = (a: any) => (a?.value || []).map((v: any) => v.address).filter(Boolean);
+  return { subject: p.subject || '', from: list(p.from)[0] || null, replyTo: list(p.replyTo), to: list(p.to), cc: list(p.cc) };
+}
+
+/**
+ * Reply / reply-all / forward over SMTP (same user and password as IMAP), keeping the thread
+ * headers, quoting the original and, for a forward, re-attaching its attachments.
+ * A copy is appended to the Sent folder (Gmail does that by itself).
+ */
+export async function sendImapComposed(
+  accountId: string,
+  externalId: string,
+  mode: 'reply' | 'replyAll' | 'forward',
+  data: { to: string[]; cc: string[]; subject: string; html: string },
+): Promise<void> {
+  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+  if (!acc || !acc.imapHost || !acc.imapUser || !acc.imapPasswordEnc) throw new Error('Conta IMAP sem dados de ligação');
+  const { simpleParser } = await import('mailparser');
+  const nodemailer = await import('nodemailer');
+  const MailComposer = (await import('nodemailer/lib/mail-composer')).default;
+
+  const p: any = await simpleParser(await getRawMessage(accountId, externalId));
+  const when = p.date instanceof Date ? p.date.toLocaleString('pt-PT') : '';
+  const header = `<div style="border-top:1px solid #ccc;padding-top:8px;margin-top:12px;font-family:Segoe UI,Arial,sans-serif;font-size:10pt">`
+    + `<b>De:</b> ${esc(p.from?.text || '')}<br><b>Enviado:</b> ${esc(when)}<br><b>Para:</b> ${esc(p.to?.text || '')}<br>`
+    + (p.cc?.text ? `<b>Cc:</b> ${esc(p.cc.text)}<br>` : '')
+    + `<b>Assunto:</b> ${esc(p.subject || '')}</div><br>`;
+  const original = p.html || (p.textAsHtml || `<pre>${esc(p.text || '')}</pre>`);
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:11pt">${data.html}</div>${header}${original}`;
+
+  const refs: string[] = Array.isArray(p.references) ? p.references : p.references ? [p.references] : [];
+  const mail: any = {
+    from: acc.displayName ? { name: acc.displayName, address: acc.email } : acc.email,
+    to: data.to,
+    cc: data.cc,
+    subject: data.subject,
+    html,
+  };
+  if (mode !== 'forward' && p.messageId) {
+    mail.inReplyTo = p.messageId;
+    mail.references = [...refs, p.messageId];
+  }
+  // Inline images of the original are needed in both cases; real attachments only when forwarding
+  mail.attachments = (p.attachments || [])
+    .filter((a: any) => mode === 'forward' || (a.cid && a.contentDisposition === 'inline'))
+    .map((a: any) => ({ filename: a.filename, content: a.content, contentType: a.contentType, cid: a.cid || undefined, contentDisposition: a.contentDisposition }));
+
+  const raw: Buffer = await new Promise((resolve, reject) =>
+    new MailComposer(mail).compile().build((err: any, msg: Buffer) => (err ? reject(err) : resolve(msg))));
+
+  const gmail = /gmail\.com$|googlemail\.com$/i.test(acc.imapHost);
+  const host = acc.smtpHost || (gmail ? 'smtp.gmail.com' : acc.imapHost.replace(/^imap\./i, 'smtp.'));
+  const pass = decryptSecret(acc.imapPasswordEnc);
+  const ports = acc.smtpPort ? [acc.smtpPort] : [465, 587];
+  let lastErr: any = null;
+  let sent = false;
+  for (const port of ports) {
+    try {
+      const transport = nodemailer.createTransport({
+        host, port, secure: port === 465, auth: { user: acc.imapUser, pass },
+        connectionTimeout: 15000, greetingTimeout: 15000,
+      });
+      await transport.sendMail({ envelope: { from: acc.email, to: [...data.to, ...data.cc] }, raw });
+      sent = true;
+      break;
+    } catch (e: any) {
+      lastErr = e;
+      // Only a connection problem justifies trying the other port; a refusal is final
+      if (!/ECONN|ETIMEDOUT|ESOCKET|ENOTFOUND|Greeting|timeout/i.test(`${e?.code} ${e?.message}`)) break;
+    }
+  }
+  if (!sent) throw new Error(`Servidor de envio ${host}: ${lastErr?.message || 'erro'}`);
+
+  if (!gmail) {
+    try {
+      const folders = await detectFolders(accountId);
+      if (folders.sent) await appendMessage(accountId, folders.sent, raw, true, new Date());
+    } catch (e: any) {
+      console.warn('Sent copy not saved:', e?.message);
+    }
+  }
+}

@@ -1,0 +1,2 @@
+ALTER TABLE "email_accounts" ADD COLUMN IF NOT EXISTS "smtpHost" TEXT;
+ALTER TABLE "email_accounts" ADD COLUMN IF NOT EXISTS "smtpPort" INTEGER;

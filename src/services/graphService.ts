@@ -66,7 +66,12 @@ export async function refreshAccessToken(accountId: string): Promise<string> {
   try {
     let result;
     try {
-      result = await tryScopes(FULL_SCOPES);
+      try {
+        // Accounts (re)added after 22-11-2026 also consented to mail.send (reply/forward from the app)
+        result = await tryScopes(['mail.send', ...FULL_SCOPES]);
+      } catch {
+        result = await tryScopes(FULL_SCOPES);
+      }
     } catch (e: any) {
       // Scope not consented (likely files.readwrite on a legacy account) -> keep working with mail-only
       result = await tryScopes(LEGACY_SCOPES);
@@ -560,4 +565,65 @@ export async function importMimeToFolder(
     }
   }
   return id;
+}
+
+
+export type ComposeMode = 'reply' | 'replyAll' | 'forward';
+
+export interface ComposeSource {
+  subject: string;
+  from: string | null;
+  replyTo: string[];
+  to: string[];
+  cc: string[];
+}
+
+/** Addresses and subject of a message, to prefill a reply/forward. */
+export async function getComposeSource(accessToken: string, messageId: string): Promise<ComposeSource> {
+  const client = createGraphClient(accessToken);
+  const m: any = await client.api(`/me/messages/${messageId}`).select('subject,from,replyTo,toRecipients,ccRecipients').get();
+  const list = (a: any[]) => (a || []).map((r) => r?.emailAddress?.address).filter(Boolean);
+  return {
+    subject: m?.subject || '',
+    from: m?.from?.emailAddress?.address || null,
+    replyTo: list(m?.replyTo),
+    to: list(m?.toRecipients),
+    cc: list(m?.ccRecipients),
+  };
+}
+
+/**
+ * Reply / reply-all / forward: Graph builds the draft (quoted original, threading headers and,
+ * for a forward, the original attachments); we put the user's text on top and send it.
+ * If anything fails the draft is removed, so nothing half-written is left in Drafts.
+ */
+export async function sendComposed(
+  accessToken: string,
+  messageId: string,
+  mode: ComposeMode,
+  data: { to: string[]; cc: string[]; subject: string; html: string },
+): Promise<void> {
+  const client = createGraphClient(accessToken);
+  const action = mode === 'reply' ? 'createReply' : mode === 'replyAll' ? 'createReplyAll' : 'createForward';
+  const draft: any = await client.api(`/me/messages/${messageId}/${action}`).post({});
+  try {
+    const quoted: string = draft?.body?.content || '';
+    const block = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:11pt">${data.html}</div><br>`;
+    const m = quoted.match(/<body[^>]*>/i);
+    const content = m ? quoted.replace(m[0], m[0] + block) : block + quoted;
+    const rcpt = (a: string[]) => a.map((address) => ({ emailAddress: { address } }));
+    await client.api(`/me/messages/${draft.id}`).patch({
+      subject: data.subject,
+      toRecipients: rcpt(data.to),
+      ccRecipients: rcpt(data.cc),
+      body: { contentType: 'html', content },
+    });
+    await client.api(`/me/messages/${draft.id}/send`).post({});
+  } catch (e: any) {
+    await client.api(`/me/messages/${draft.id}`).delete().catch(() => {});
+    if (e?.statusCode === 403 || /access.?denied|ErrorAccessDenied/i.test(`${e?.code} ${e?.message}`)) {
+      throw new Error('Esta conta ainda não deu permissão para enviar. Volta a adicionar a conta Microsoft (Contas → Adicionar) para aceitar a permissão de envio.');
+    }
+    throw e;
+  }
 }

@@ -515,3 +515,18 @@ export async function moveEmailToFolder(
   const { data } = await api.post(`/api/emails/${id}/move`, { folderId, accountId });
   return data;
 }
+
+export async function getComposeDefaults(
+  id: string, mode: 'reply' | 'replyAll' | 'forward',
+): Promise<{ to: string[]; cc: string[]; subject: string; from: string }> {
+  const { data } = await api.get(`/api/emails/${id}/compose`, { params: { mode } });
+  return data;
+}
+
+export async function sendComposed(
+  id: string,
+  body: { mode: 'reply' | 'replyAll' | 'forward'; to: string[]; cc: string[]; subject: string; html: string },
+): Promise<{ sent: boolean }> {
+  const { data } = await api.post(`/api/emails/${id}/send`, body);
+  return data;
+}

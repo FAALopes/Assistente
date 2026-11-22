@@ -1,7 +1,10 @@
 import SyncProgress from './components/SyncProgress';
+import ComposeModal, { type ComposeMode } from './components/ComposeModal';
+import { ReplyIcon, ReplyAllIcon, ForwardIcon } from './components/MailIcons';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Layout, Button, Typography, Space, message, Spin, Modal } from 'antd';
+import { Layout, Button, Typography, Space, message, Spin, Modal, Tooltip } from 'antd';
 import {
+  DeleteOutlined,
   SyncOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -70,6 +73,7 @@ function App() {
   });
   const isJunkFolder = filters.folder === 'junkemail';
   const [previewEmail, setPreviewEmail] = useState<Email | null>(null);
+  const [composeMode, setComposeMode] = useState<ComposeMode | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
   // Flatten folders for EmailList (unique by id)
@@ -530,6 +534,23 @@ function App() {
             }}>
               {previewEmail ? (
                 <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid #f0f0f0' }}>
+                    <Tooltip title="Responder">
+                      <Button type="text" size="small" icon={<ReplyIcon />} onClick={() => setComposeMode('reply')} />
+                    </Tooltip>
+                    <Tooltip title="Responder a todos">
+                      <Button type="text" size="small" icon={<ReplyAllIcon />} onClick={() => setComposeMode('replyAll')} />
+                    </Tooltip>
+                    <Tooltip title="Reencaminhar">
+                      <Button type="text" size="small" icon={<ForwardIcon />} onClick={() => setComposeMode('forward')} />
+                    </Tooltip>
+                    <Tooltip title="Apagar (vai para o Lixo)">
+                      <Button
+                        type="text" size="small" danger icon={<DeleteOutlined />}
+                        onClick={() => { const id = previewEmail.id; setPreviewEmail(null); handleDeleteEmail(id); }}
+                      />
+                    </Tooltip>
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <Title level={5} style={{ margin: 0, flex: 1, fontSize: 15, lineHeight: 1.3 }}>
                       {previewEmail.subject || '(sem assunto)'}
@@ -590,6 +611,13 @@ function App() {
           setRulePreviewOpen(false);
           setRulePreviewData(null);
         }}
+      />
+
+      <ComposeModal
+        email={composeMode ? previewEmail : null}
+        mode={composeMode}
+        onClose={() => setComposeMode(null)}
+        onSent={() => setComposeMode(null)}
       />
 
       {syncing && (() => {

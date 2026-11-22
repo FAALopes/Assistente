@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { RuleAction } from '@prisma/client';
 import { isValidCategory } from '../services/categories';
 import { prisma } from '../index';
-import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, moveEmailToFolder as mailMoveToFolder, getRawMime, importMime } from '../services/mailService';
+import { deleteEmail as mailDeleteEmail, moveEmailToInbox as mailMoveToInbox, moveEmailToFolder as mailMoveToFolder, getRawMime, importMime, getComposeDefaults, sendComposed } from '../services/mailService';
 import { getValidToken, fetchMessageBody } from '../services/graphService';
 import { fetchImapMessageBody, parseExternalId } from '../services/imapService';
 import { resolveFolderId, resolveFolderIdForAccounts } from '../services/folderResolver';
@@ -297,6 +297,53 @@ router.get('/:id/body', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.error('Error fetching email body:', e);
     res.status(500).json({ error: e?.message || 'Failed to fetch body' });
+  }
+});
+
+const MODES = ['reply', 'replyAll', 'forward'];
+const ADDR = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+
+// GET /api/emails/:id/compose?mode=reply|replyAll|forward - recipients and subject to prefill
+router.get('/:id/compose', async (req: Request, res: Response) => {
+  try {
+    const mode = String(req.query.mode || '');
+    if (!MODES.includes(mode)) { res.status(400).json({ error: 'mode inválido' }); return; }
+    const email = await prisma.email.findUnique({ where: { id: req.params.id as string }, include: { account: { select: { email: true } } } });
+    if (!email) { res.status(404).json({ error: 'Email not found' }); return; }
+    const d = await getComposeDefaults(email.accountId, email.externalId, mode as any);
+    res.json({ ...d, from: email.account.email });
+  } catch (e: any) {
+    console.error('Error preparing compose:', e);
+    res.status(500).json({ error: e?.message || 'Failed to prepare reply' });
+  }
+});
+
+// POST /api/emails/:id/send { mode, to[], cc[], subject, html } - reply / reply all / forward
+router.post('/:id/send', async (req: Request, res: Response) => {
+  try {
+    const { mode, subject, html } = req.body || {};
+    const clean = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean);
+    const to = clean(req.body?.to);
+    const cc = clean(req.body?.cc);
+    if (!MODES.includes(mode)) { res.status(400).json({ error: 'mode inválido' }); return; }
+    if (to.length === 0) { res.status(400).json({ error: 'Falta o destinatário' }); return; }
+    const bad = [...to, ...cc].find((a) => !ADDR.test(a));
+    if (bad) { res.status(400).json({ error: `Endereço inválido: ${bad}` }); return; }
+    if (typeof html !== 'string' || typeof subject !== 'string') { res.status(400).json({ error: 'Pedido inválido' }); return; }
+
+    const email = await prisma.email.findUnique({ where: { id: req.params.id as string } });
+    if (!email) { res.status(404).json({ error: 'Email not found' }); return; }
+    try {
+      await sendComposed(email.accountId, email.externalId, mode, { to, cc, subject, html });
+    } catch (e: any) {
+      console.error('Send error:', e?.message);
+      res.status(502).json({ error: `Não foi enviado: ${e?.message || 'erro'}` });
+      return;
+    }
+    res.json({ sent: true });
+  } catch (e: any) {
+    console.error('Error sending email:', e);
+    res.status(500).json({ error: 'Failed to send email' });
   }
 });
 

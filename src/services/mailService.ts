@@ -109,3 +109,35 @@ export async function importMime(
   }
   throw new Error('Provider not supported');
 }
+
+export type ComposeMode = graph.ComposeMode;
+
+/** Recipients and subject to prefill when replying to / forwarding a message. */
+export async function getComposeDefaults(accountId: string, externalId: string, mode: ComposeMode): Promise<{ to: string[]; cc: string[]; subject: string }> {
+  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+  if (!acc) throw new Error('Account not found');
+  const src = acc.provider === 'MICROSOFT'
+    ? await graph.getComposeSource(await graph.getValidToken(accountId), externalId)
+    : await imap.getImapComposeSource(accountId, externalId);
+  const me = acc.email.toLowerCase();
+  const uniq = (a: string[]) => [...new Map(a.filter(Boolean).map((x) => [x.toLowerCase(), x])).values()];
+  const bare = src.subject.replace(/^\s*((re|fw|fwd|enc|res)\s*:\s*)+/i, '');
+  if (mode === 'forward') return { to: [], cc: [], subject: `FW: ${bare}` };
+  const replyTo = src.replyTo.length ? src.replyTo : (src.from ? [src.from] : []);
+  if (mode === 'reply') return { to: uniq(replyTo), cc: [], subject: `RE: ${bare}` };
+  const to = uniq([...replyTo, ...src.to]).filter((a) => a.toLowerCase() !== me);
+  const toSet = new Set(to.map((a) => a.toLowerCase()));
+  const cc = uniq(src.cc).filter((a) => a.toLowerCase() !== me && !toSet.has(a.toLowerCase()));
+  return { to: to.length ? to : uniq(replyTo), cc, subject: `RE: ${bare}` };
+}
+
+export async function sendComposed(
+  accountId: string, externalId: string, mode: ComposeMode,
+  data: { to: string[]; cc: string[]; subject: string; html: string },
+): Promise<void> {
+  const acc = await prisma.emailAccount.findUnique({ where: { id: accountId } });
+  if (!acc) throw new Error('Account not found');
+  if (acc.provider === 'MICROSOFT') return graph.sendComposed(await graph.getValidToken(accountId), externalId, mode, data);
+  if (acc.provider === 'IMAP') return imap.sendImapComposed(accountId, externalId, mode, data);
+  throw new Error('Provider not supported');
+}

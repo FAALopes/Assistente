@@ -53,6 +53,8 @@ model EmailAccount {
   imapUser         String?
   imapPasswordEnc  String?
   imapTls          Boolean @default(true)
+  smtpHost         String?  // null = guessed from imapHost
+  smtpPort         Int?
   sortOrder    Int       @default(0)
   globalDeltaLink  String?  // Microsoft Graph /me/messages/delta link
   autoSyncMinutes Int?     // null = off; otherwise minimum minutes between auto syncs
